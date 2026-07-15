@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { HashRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/layout/app-shell'
 import { DashboardPage } from '@/pages/dashboard'
@@ -8,8 +9,16 @@ import { CalendarPage } from '@/pages/calendar'
 import { PlannerPage } from '@/pages/planner'
 import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
+import { useSettingsStore } from '@/store/settings-store'
+import { useTheme } from '@/hooks/use-theme'
 
 function App() {
+  const loadSettings = useSettingsStore((s) => s.load)
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
+  useTheme()
+
   return (
     <HashRouter>
       <Routes>

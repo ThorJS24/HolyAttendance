@@ -1,4 +1,4 @@
-import type { BunkMateApi } from '../../electron/preload'
+import type { BunkMateApi } from '../../electron/ipc/contract'
 
 declare global {
   interface Window {

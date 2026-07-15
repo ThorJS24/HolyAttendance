@@ -1,0 +1,7 @@
+export * as subjectsRepo from './subjects'
+export * as timetableSlotsRepo from './timetable-slots'
+export * as attendanceRecordsRepo from './attendance-records'
+export * as holidaysRepo from './holidays'
+export * as leavePlansRepo from './leave-plans'
+export * as yellowFormsRepo from './yellow-forms'
+export * as settingsRepo from './settings'

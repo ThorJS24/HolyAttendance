@@ -1,14 +1,61 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+import { IPC_CHANNELS, type BunkMateApi } from './ipc/contract'
 
-// TODO(phase-1): expose typed IPC methods for CRUD on subjects, timetable
-// slots, attendance records, holidays, leave plans, yellow forms, settings.
-const api = {
+const api: BunkMateApi = {
   versions: {
     node: process.versions.node,
     electron: process.versions.electron,
   },
-}
 
-export type BunkMateApi = typeof api
+  subjects: {
+    list: (opts) => ipcRenderer.invoke(IPC_CHANNELS.subjectsList, opts),
+    get: (id) => ipcRenderer.invoke(IPC_CHANNELS.subjectsGet, id),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.subjectsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.subjectsUpdate, id, input),
+    setArchived: (id, archived) => ipcRenderer.invoke(IPC_CHANNELS.subjectsSetArchived, id, archived),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.subjectsDelete, id),
+  },
+
+  timetableSlots: {
+    list: (opts) => ipcRenderer.invoke(IPC_CHANNELS.timetableSlotsList, opts),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.timetableSlotsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.timetableSlotsUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.timetableSlotsDelete, id),
+  },
+
+  attendanceRecords: {
+    list: (filter) => ipcRenderer.invoke(IPC_CHANNELS.attendanceRecordsList, filter),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.attendanceRecordsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.attendanceRecordsUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.attendanceRecordsDelete, id),
+  },
+
+  holidays: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.holidaysList),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.holidaysCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.holidaysUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.holidaysDelete, id),
+  },
+
+  leavePlans: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.leavePlansList),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.leavePlansCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.leavePlansUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.leavePlansDelete, id),
+  },
+
+  yellowForms: {
+    list: (opts) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsList, opts),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsUpdate, id, input),
+    setStatus: (id, status) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsSetStatus, id, status),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsDelete, id),
+  },
+
+  settings: {
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
+    update: (input) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, input),
+  },
+}
 
 contextBridge.exposeInMainWorld('bunkmate', api)
