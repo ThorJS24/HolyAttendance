@@ -14,8 +14,22 @@ export function getTimetableSlot(db: AppDatabase, id: number): TimetableSlot | u
   return db.select().from(timetableSlots).where(eq(timetableSlots.id, id)).get()
 }
 
+/** Assigning a slot that already exists for that semester/day/period updates it instead of duplicating. */
 export function createTimetableSlot(db: AppDatabase, input: NewTimetableSlot): TimetableSlot {
-  return db.insert(timetableSlots).values(input).returning().get()
+  return db
+    .insert(timetableSlots)
+    .values(input)
+    .onConflictDoUpdate({
+      target: [timetableSlots.semester, timetableSlots.day, timetableSlots.period],
+      set: {
+        subjectId: input.subjectId,
+        type: input.type,
+        startTime: input.startTime,
+        endTime: input.endTime,
+      },
+    })
+    .returning()
+    .get()
 }
 
 export function updateTimetableSlot(db: AppDatabase, id: number, input: TimetableSlotUpdate): TimetableSlot {

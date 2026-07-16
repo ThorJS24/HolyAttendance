@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToastStore } from '@/store/toast-store'
+import { useHotkey } from '@/hooks/use-hotkey'
 import type { Subject, NewSubject } from '../../electron/db/repositories/subjects'
 
 const CATEGORIES = ['core', 'elective', 'lab', 'other']
@@ -71,6 +73,8 @@ export function SubjectsPage() {
     setDialogOpen(true)
   }
 
+  useHotkey('n', openCreateDialog)
+
   function openEditDialog(subject: Subject) {
     setEditing(subject)
     setForm({
@@ -92,7 +96,7 @@ export function SubjectsPage() {
       const payload: NewSubject = {
         name: form.name.trim(),
         semester: form.semester.trim(),
-        credits: Number(form.credits) || 0,
+        credits: Math.max(0, Number(form.credits) || 0),
         faculty: form.faculty.trim() || null,
         category: form.category || null,
       }
@@ -172,6 +176,13 @@ export function SubjectsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <Spinner className="mx-auto" />
+                  </TableCell>
+                </TableRow>
+              )}
               {visibleSubjects.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
@@ -179,7 +190,8 @@ export function SubjectsPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {visibleSubjects.map((subject) => (
+              {!loading &&
+                visibleSubjects.map((subject) => (
                 <TableRow key={subject.id}>
                   <TableCell className="font-medium">{subject.name}</TableCell>
                   <TableCell>{subject.semester}</TableCell>

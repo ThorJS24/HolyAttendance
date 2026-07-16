@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   BookOpen,
@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { GlobalSearch } from '@/components/global-search'
 import { NotificationCenter } from '@/components/notification-center'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -25,6 +26,7 @@ const navItems = [
 ]
 
 export function AppShell() {
+  const location = useLocation()
   return (
     <div className="flex h-full">
       <aside className="flex w-56 shrink-0 flex-col border-r bg-card">
@@ -58,7 +60,9 @@ export function AppShell() {
           <NotificationCenter />
         </header>
         <main className="flex-1 overflow-auto p-6">
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

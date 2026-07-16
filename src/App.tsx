@@ -12,6 +12,7 @@ import { SettingsPage } from '@/pages/settings'
 import { useSettingsStore } from '@/store/settings-store'
 import { useTheme } from '@/hooks/use-theme'
 import { Toaster } from '@/components/ui/toaster'
+import { KeyboardShortcuts } from '@/components/keyboard-shortcuts'
 
 function App() {
   const loadSettings = useSettingsStore((s) => s.load)
@@ -35,6 +36,7 @@ function App() {
         </Route>
       </Routes>
       <Toaster />
+      <KeyboardShortcuts />
     </HashRouter>
   )
 }

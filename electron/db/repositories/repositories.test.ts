@@ -114,6 +114,47 @@ describe('timetable slots repository', () => {
     subjectsRepo.deleteSubject(db, subject.id)
     expect(timetableSlotsRepo.getTimetableSlot(db, slot.id)).toBeUndefined()
   })
+
+  it('assigning the same semester/day/period twice updates the slot instead of duplicating it', () => {
+    const subjectA = subjectsRepo.createSubject(db, {
+      name: 'A',
+      semester: '2026-1',
+      credits: 3,
+      faculty: null,
+      category: null,
+    })
+    const subjectB = subjectsRepo.createSubject(db, {
+      name: 'B',
+      semester: '2026-1',
+      credits: 3,
+      faculty: null,
+      category: null,
+    })
+
+    const first = timetableSlotsRepo.createTimetableSlot(db, {
+      semester: '2026-1',
+      day: 'mon',
+      period: 1,
+      subjectId: subjectA.id,
+      type: 'class',
+      startTime: null,
+      endTime: null,
+    })
+    const second = timetableSlotsRepo.createTimetableSlot(db, {
+      semester: '2026-1',
+      day: 'mon',
+      period: 1,
+      subjectId: subjectB.id,
+      type: 'meeting',
+      startTime: null,
+      endTime: null,
+    })
+
+    expect(second.id).toBe(first.id)
+    expect(second.subjectId).toBe(subjectB.id)
+    expect(second.type).toBe('meeting')
+    expect(timetableSlotsRepo.listTimetableSlots(db, { semester: '2026-1' })).toHaveLength(1)
+  })
 })
 
 describe('attendance records repository', () => {
@@ -180,6 +221,37 @@ describe('attendance records repository', () => {
 
     attendanceRecordsRepo.deleteAttendanceRecord(db, record.id)
     expect(attendanceRecordsRepo.getAttendanceRecord(db, record.id)).toBeUndefined()
+  })
+
+  it('marking the same subject/date/period twice updates the record instead of duplicating it', () => {
+    const subject = subjectsRepo.createSubject(db, {
+      name: 'Networks',
+      semester: '2026-1',
+      credits: 3,
+      faculty: null,
+      category: null,
+    })
+
+    const first = attendanceRecordsRepo.createAttendanceRecord(db, {
+      subjectId: subject.id,
+      date: '2026-01-10',
+      period: 1,
+      status: 'absent',
+      source: 'manual',
+      slotId: null,
+    })
+    const second = attendanceRecordsRepo.createAttendanceRecord(db, {
+      subjectId: subject.id,
+      date: '2026-01-10',
+      period: 1,
+      status: 'present',
+      source: 'manual',
+      slotId: null,
+    })
+
+    expect(second.id).toBe(first.id)
+    expect(second.status).toBe('present')
+    expect(attendanceRecordsRepo.listAttendanceRecords(db, { subjectId: subject.id })).toHaveLength(1)
   })
 })
 

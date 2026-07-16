@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // Weekday keys used across timetable_slots and holidays scoping.
 export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
@@ -52,37 +52,53 @@ export const periodTypeRules = sqliteTable('period_type_rules', {
   bucket: text('bucket').$type<'excluded' | 'project' | 'normal' | 'ignored'>().notNull(),
 })
 
-export const timetableSlots = sqliteTable('timetable_slots', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  semester: text('semester').notNull(),
-  day: text('day').$type<Weekday>().notNull(),
-  period: integer('period').notNull(),
-  subjectId: integer('subject_id').references(() => subjects.id, { onDelete: 'cascade' }),
-  type: text('type').$type<PeriodType>().notNull().default('class'),
-  startTime: text('start_time'),
-  endTime: text('end_time'),
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-})
+export const timetableSlots = sqliteTable(
+  'timetable_slots',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    semester: text('semester').notNull(),
+    day: text('day').$type<Weekday>().notNull(),
+    period: integer('period').notNull(),
+    subjectId: integer('subject_id').references(() => subjects.id, { onDelete: 'cascade' }),
+    type: text('type').$type<PeriodType>().notNull().default('class'),
+    startTime: text('start_time'),
+    endTime: text('end_time'),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    // At most one slot per semester/day/period — a timetable cell is a
+    // single thing, not a list.
+    uniqueIndex('timetable_slots_semester_day_period_unique').on(table.semester, table.day, table.period),
+  ],
+)
 
-export const attendanceRecords = sqliteTable('attendance_records', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  subjectId: integer('subject_id')
-    .notNull()
-    .references(() => subjects.id, { onDelete: 'cascade' }),
-  date: text('date').notNull(),
-  period: integer('period').notNull(),
-  status: text('status').$type<AttendanceStatus>().notNull(),
-  source: text('source').$type<AttendanceSource>().notNull().default('manual'),
-  slotId: integer('slot_id').references(() => timetableSlots.id, { onDelete: 'set null' }),
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-})
+export const attendanceRecords = sqliteTable(
+  'attendance_records',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    subjectId: integer('subject_id')
+      .notNull()
+      .references(() => subjects.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    period: integer('period').notNull(),
+    status: text('status').$type<AttendanceStatus>().notNull(),
+    source: text('source').$type<AttendanceSource>().notNull().default('manual'),
+    slotId: integer('slot_id').references(() => timetableSlots.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    // At most one attendance record per subject/date/period — marking the
+    // same period twice should edit the existing record, not duplicate it.
+    uniqueIndex('attendance_records_subject_date_period_unique').on(table.subjectId, table.date, table.period),
+  ],
+)
 
 export const holidays = sqliteTable('holidays', {
   id: integer('id').primaryKey({ autoIncrement: true }),

@@ -91,7 +91,11 @@ export function SettingsPage() {
               className="w-28"
               value={minTargetInput}
               onChange={(e) => setMinTargetInput(e.target.value)}
-              onBlur={() => setMinTarget(Number(minTargetInput) || 0)}
+              onBlur={() => {
+                const clamped = Math.min(100, Math.max(0, Number(minTargetInput) || 0))
+                setMinTargetInput(String(clamped))
+                setMinTarget(clamped)
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -160,7 +164,11 @@ export function SettingsPage() {
                 className="w-28"
                 value={intervalInput}
                 onChange={(e) => setIntervalInput(e.target.value)}
-                onBlur={() => setBackupIntervalDays(Number(intervalInput) || 1)}
+                onBlur={() => {
+                  const clamped = Math.max(1, Number(intervalInput) || 1)
+                  setIntervalInput(String(clamped))
+                  setBackupIntervalDays(clamped)
+                }}
               />
             </div>
             <div className="space-y-2">

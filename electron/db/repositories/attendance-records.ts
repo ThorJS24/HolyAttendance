@@ -27,8 +27,21 @@ export function getAttendanceRecord(db: AppDatabase, id: number): AttendanceReco
   return db.select().from(attendanceRecords).where(eq(attendanceRecords.id, id)).get()
 }
 
+/**
+ * Marking the same subject/date/period twice (e.g. from two different
+ * screens) updates the existing record instead of erroring on the unique
+ * constraint or creating a duplicate.
+ */
 export function createAttendanceRecord(db: AppDatabase, input: NewAttendanceRecord): AttendanceRecord {
-  return db.insert(attendanceRecords).values(input).returning().get()
+  return db
+    .insert(attendanceRecords)
+    .values(input)
+    .onConflictDoUpdate({
+      target: [attendanceRecords.subjectId, attendanceRecords.date, attendanceRecords.period],
+      set: { status: input.status, source: input.source, slotId: input.slotId, updatedAt: new Date() },
+    })
+    .returning()
+    .get()
 }
 
 export function updateAttendanceRecord(

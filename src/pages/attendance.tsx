@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ import { useToastStore } from '@/store/toast-store'
 import type { AttendanceRecord } from '../../electron/db/repositories/attendance-records'
 import type { AttendanceStatus } from '@/db/schema'
 import { todayIso } from '@/lib/date-utils'
+import { useHotkey } from '@/hooks/use-hotkey'
 
 function startOfMonth(): string {
   const d = new Date()
@@ -81,6 +83,8 @@ export function AttendancePage() {
     setDialogOpen(true)
   }
 
+  useHotkey('n', openCreateDialog, subjects.length > 0)
+
   function openEditDialog(record: AttendanceRecord) {
     setEditing(record)
     setForm({
@@ -102,7 +106,7 @@ export function AttendancePage() {
         await update(editing.id, {
           subjectId: Number(form.subjectId),
           date: form.date,
-          period: Number(form.period),
+          period: Math.max(1, Number(form.period) || 1),
           status: form.status,
         })
         pushToast({ title: 'Attendance updated' })
@@ -110,7 +114,7 @@ export function AttendancePage() {
         await create({
           subjectId: Number(form.subjectId),
           date: form.date,
-          period: Number(form.period),
+          period: Math.max(1, Number(form.period) || 1),
           status: form.status,
           source: 'manual',
           slotId: null,
@@ -209,6 +213,13 @@ export function AttendancePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <Spinner className="mx-auto" />
+                  </TableCell>
+                </TableRow>
+              )}
               {sortedRecords.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
@@ -216,7 +227,7 @@ export function AttendancePage() {
                   </TableCell>
                 </TableRow>
               )}
-              {sortedRecords.map((record) => (
+              {!loading && sortedRecords.map((record) => (
                 <TableRow key={record.id}>
                   <TableCell>{record.date}</TableCell>
                   <TableCell>{record.period}</TableCell>
