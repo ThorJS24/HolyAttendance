@@ -24,6 +24,7 @@ import { useLeavePlansStore } from '@/store/leave-plans-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
 import { jsDayToWeekday } from '@/lib/attendance-engine'
+import { resolveDayPeriods, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
 import { todayIso } from '@/lib/date-utils'
 import { HolidaysTab } from '@/pages/holidays-tab'
 import { YellowFormsTab } from '@/pages/yellow-forms-tab'
@@ -141,6 +142,33 @@ function CalendarGrid() {
         onLeave: leaveDates.has(selectedDate),
       }
     : null
+
+  // Classifies each of the selected day's periods so already-finished,
+  // unmarked classes can be flagged as auto-present the same way the
+  // attendance engine now counts them (see day-attendance.ts).
+  const dayPeriodStatusBySlot = useMemo(() => {
+    if (!selectedDate) return new Map<number, ReturnType<typeof resolveDayPeriods>[number]['effectiveStatus']>()
+    const weekday = jsDayToWeekday(selectedDate)
+    if (!weekday) return new Map()
+    const daySlots = slots.filter((s) => s.day === weekday)
+    const dayRecords = recordsByDate.get(selectedDate) ?? []
+    const periodEndMinutes = buildPeriodEndMinutesForDay(slots, weekday)
+    const resolved = resolveDayPeriods({
+      scheduledPeriods: daySlots.map((s) => ({
+        date: selectedDate,
+        day: weekday,
+        period: s.period,
+        subjectId: s.subjectId,
+        type: s.type,
+        slotId: s.id,
+      })),
+      records: dayRecords,
+      todayIso: todayIso(),
+      nowMinutes: minutesSinceMidnight(new Date()),
+      periodEndMinutes,
+    })
+    return new Map(resolved.map((p) => [p.slotId, p.effectiveStatus]))
+  }, [selectedDate, slots, recordsByDate])
 
   async function toggleAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
     if (!selectedDate) return
@@ -344,11 +372,17 @@ function CalendarGrid() {
               )
               const isLunch = slot.type === 'lunch'
               const yellowForm = slot.subjectId !== null ? yellowFormFor(slot.subjectId, slot.period) : undefined
+              const autoPresent = !record && dayPeriodStatusBySlot.get(slot.id) === 'auto_present'
               return (
                 <div key={slot.id} className="rounded-md border p-2">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-sm">
                       P{slot.period} · {subjectName ?? slot.type}
+                      {autoPresent && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Auto-present
+                        </Badge>
+                      )}
                       {yellowForm && (
                         <Badge
                           variant={
@@ -368,7 +402,7 @@ function CalendarGrid() {
                       <div className="flex gap-1">
                         <Button
                           size="sm"
-                          variant={record?.status === 'present' ? 'default' : 'outline'}
+                          variant={record?.status === 'present' || autoPresent ? 'default' : 'outline'}
                           onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'present')}
                         >
                           Present
