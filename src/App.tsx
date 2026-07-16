@@ -11,6 +11,7 @@ import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
 import { useSettingsStore } from '@/store/settings-store'
 import { useTheme } from '@/hooks/use-theme'
+import { Toaster } from '@/components/ui/toaster'
 
 function App() {
   const loadSettings = useSettingsStore((s) => s.load)
@@ -33,6 +34,7 @@ function App() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>
+      <Toaster />
     </HashRouter>
   )
 }
