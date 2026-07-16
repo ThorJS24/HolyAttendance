@@ -180,6 +180,25 @@ export function aggregateOverall(bySubject: Map<number, SubjectAttendance>): Buc
   return finalizeStats(stats)
 }
 
+export interface SubjectMinTargetInput {
+  customMinTarget: number | null
+}
+
+/**
+ * Resolves the effective minimum target for a subject: its own override if
+ * set, otherwise the settings-wide default subject target. This is the one
+ * place that decides "which target applies here" — callers should never
+ * inline `subject.customMinTarget ?? subjectMinTarget` themselves, so the
+ * fallback rule can't drift between the dashboard, notifications, analytics,
+ * and reports.
+ */
+export function resolveSubjectMinTarget(
+  subject: SubjectMinTargetInput,
+  defaultSubjectMinTarget: number,
+): number {
+  return subject.customMinTarget ?? defaultSubjectMinTarget
+}
+
 /**
  * How many more (conducted-but-absent) classes can happen from here while
  * attendance stays at or above `targetPercent`, assuming no more classes are

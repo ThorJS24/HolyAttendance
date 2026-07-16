@@ -33,6 +33,10 @@ export const subjects = sqliteTable('subjects', {
   faculty: text('faculty'),
   category: text('category'),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  // Per-subject override of settings.subjectMinTarget. Null means "inherit
+  // the default subject minimum" — resolved via resolveSubjectMinTarget()
+  // in the attendance engine, never read as a bare column value elsewhere.
+  customMinTarget: real('custom_min_target'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -138,7 +142,12 @@ export const yellowForms = sqliteTable('yellow_forms', {
 // Singleton row (id = 1) holding app-wide settings.
 export const settings = sqliteTable('settings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  minTarget: real('min_target').notNull().default(75),
+  // Used for the dashboard's overall attendance warning/safe-bunk count.
+  overallMinTarget: real('overall_min_target').notNull().default(75),
+  // Default per-subject target; a subject's own customMinTarget (if set)
+  // takes precedence over this. See resolveSubjectMinTarget() in the
+  // attendance engine.
+  subjectMinTarget: real('subject_min_target').notNull().default(75),
   theme: text('theme').notNull().default('system'),
   currentSemester: text('current_semester').notNull().default(''),
   backupIntervalDays: integer('backup_interval_days').notNull().default(7),
