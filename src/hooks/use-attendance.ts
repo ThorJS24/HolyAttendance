@@ -1,10 +1,18 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAttendanceStore } from '@/store/attendance-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { usePeriodTypeRulesStore } from '@/store/period-type-rules-store'
-import { computeAttendance, aggregateOverall, type SubjectAttendance } from '@/lib/attendance-engine'
+import {
+  computeAttendance,
+  aggregateOverall,
+  jsDayToWeekday,
+  scheduledPeriodsForDates,
+  type SubjectAttendance,
+} from '@/lib/attendance-engine'
+import { autoPresentRecords, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
+import { todayIso } from '@/lib/date-utils'
 
 export interface UseAttendanceResult {
   bySubject: Map<number, SubjectAttendance>
@@ -46,10 +54,32 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
     if (semester) loadSlots(semester)
   }, [loadSlots, semester])
 
-  const bySubject = useMemo(
-    () => computeAttendance({ records, slots, holidays, yellowForms, rules }),
-    [records, slots, holidays, yellowForms, rules],
-  )
+  // A class crossing its end-time should flip to auto-present without the
+  // user having to touch anything else first, so re-read "now" every minute.
+  const [nowMinutes, setNowMinutes] = useState(() => minutesSinceMidnight(new Date()))
+  useEffect(() => {
+    const id = setInterval(() => setNowMinutes(minutesSinceMidnight(new Date())), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const bySubject = useMemo(() => {
+    const today = todayIso()
+    const weekday = jsDayToWeekday(today)
+    const todaysPeriods = weekday
+      ? scheduledPeriodsForDates({ slots, holidays, dates: [today] })
+      : []
+    const periodEndMinutes = weekday ? buildPeriodEndMinutesForDay(slots, weekday) : new Map()
+
+    const autoPresent = autoPresentRecords({
+      scheduledPeriods: todaysPeriods,
+      records,
+      todayIso: today,
+      nowMinutes,
+      periodEndMinutes,
+    })
+
+    return computeAttendance({ records: [...records, ...autoPresent], slots, holidays, yellowForms, rules })
+  }, [records, slots, holidays, yellowForms, rules, nowMinutes])
 
   const overall = useMemo(() => aggregateOverall(bySubject), [bySubject])
 
