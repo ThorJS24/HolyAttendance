@@ -49,6 +49,7 @@ export interface AttendanceRecordInput {
 }
 
 export interface YellowFormInput {
+  id: number
   subjectId: number
   date: string
   /** null means the approval covers every period that subject has that day. */
@@ -211,4 +212,136 @@ export function computeClassesNeededToReachTarget(
   const denominator = 1 - p
   if (denominator <= 0) return Infinity
   return Math.max(0, Math.ceil(numerator / denominator))
+}
+
+// --- Future-schedule projection (Simulator / Leave Planner) ---------------
+//
+// The simulator doesn't need a separate computation path: a "what if"
+// scenario is just the real records plus a set of hypothetical ones for
+// dates that haven't happened yet, run through the exact same
+// computeAttendance(). enumerateScheduledPeriods() is the one new primitive
+// that requires — turning the recurring weekly timetable into concrete
+// dated periods over a range, honoring holiday exclusion.
+
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'
+
+const WEEKDAY_BY_JS_DAY: Record<number, Weekday | null> = {
+  0: null,
+  1: 'mon',
+  2: 'tue',
+  3: 'wed',
+  4: 'thu',
+  5: 'fri',
+  6: 'sat',
+}
+
+/**
+ * Returns null for Sunday (the timetable only models Mon-Sat). Takes an ISO
+ * yyyy-mm-dd string rather than a Date so callers can't accidentally hand in
+ * a local-time Date and get a day shifted by their timezone offset — this
+ * always resolves the weekday as UTC-anchored, matching how dates are
+ * stored (plain date strings, no time-of-day) everywhere else in the app.
+ */
+export function jsDayToWeekday(dateIso: string): Weekday | null {
+  return WEEKDAY_BY_JS_DAY[new Date(`${dateIso}T00:00:00Z`).getUTCDay()]
+}
+
+export interface TimetableSlotWithSchedule extends TimetableSlotInput {
+  day: Weekday
+  period: number
+}
+
+export interface ScheduledPeriod {
+  date: string
+  day: Weekday
+  period: number
+  subjectId: number | null
+  type: string
+  slotId: number
+}
+
+function groupSlotsByDay(
+  slots: TimetableSlotWithSchedule[],
+): Map<Weekday, TimetableSlotWithSchedule[]> {
+  const slotsByDay = new Map<Weekday, TimetableSlotWithSchedule[]>()
+  for (const slot of slots) {
+    const list = slotsByDay.get(slot.day)
+    if (list) list.push(slot)
+    else slotsByDay.set(slot.day, [slot])
+  }
+  return slotsByDay
+}
+
+function scheduledPeriodsOnDate(
+  dateIso: string,
+  slotsByDay: Map<Weekday, TimetableSlotWithSchedule[]>,
+  holidays: HolidayInput[],
+): ScheduledPeriod[] {
+  const weekday = jsDayToWeekday(dateIso)
+  if (!weekday || isExcludedHoliday(dateIso, holidays)) return []
+  return (slotsByDay.get(weekday) ?? []).map((slot) => ({
+    date: dateIso,
+    day: weekday,
+    period: slot.period,
+    subjectId: slot.subjectId,
+    type: slot.type,
+    slotId: slot.id,
+  }))
+}
+
+/**
+ * Expands the recurring weekly timetable into concrete dated periods
+ * between startDate and endDate (both inclusive, ISO yyyy-mm-dd), skipping
+ * dates excluded by a holiday.
+ */
+export function enumerateScheduledPeriods(params: {
+  slots: TimetableSlotWithSchedule[]
+  holidays: HolidayInput[]
+  startDate: string
+  endDate: string
+}): ScheduledPeriod[] {
+  const { slots, holidays, startDate, endDate } = params
+  const slotsByDay = groupSlotsByDay(slots)
+
+  const result: ScheduledPeriod[] = []
+  const cursor = new Date(`${startDate}T00:00:00Z`)
+  const end = new Date(`${endDate}T00:00:00Z`)
+  while (cursor <= end) {
+    const iso = cursor.toISOString().slice(0, 10)
+    result.push(...scheduledPeriodsOnDate(iso, slotsByDay, holidays))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return result
+}
+
+/**
+ * Same as enumerateScheduledPeriods, but for an arbitrary (not necessarily
+ * contiguous) set of dates — used for leave plans, which store a list of
+ * individually chosen dates rather than a start/end range.
+ */
+export function scheduledPeriodsForDates(params: {
+  slots: TimetableSlotWithSchedule[]
+  holidays: HolidayInput[]
+  dates: string[]
+}): ScheduledPeriod[] {
+  const { slots, holidays, dates } = params
+  const slotsByDay = groupSlotsByDay(slots)
+  return dates.flatMap((date) => scheduledPeriodsOnDate(date, slotsByDay, holidays))
+}
+
+/** Turns scheduled periods into hypothetical attendance records under a single assumption. */
+export function projectRecords(
+  periods: ScheduledPeriod[],
+  status: AttendanceStatus,
+): AttendanceRecordInput[] {
+  return periods
+    .filter((p): p is ScheduledPeriod & { subjectId: number } => p.subjectId !== null)
+    .map((p) => ({
+      subjectId: p.subjectId,
+      date: p.date,
+      period: p.period,
+      status,
+      slotId: p.slotId,
+    }))
 }

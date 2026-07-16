@@ -20,14 +20,11 @@ import { useAttendanceStore } from '@/store/attendance-store'
 import { useToastStore } from '@/store/toast-store'
 import type { AttendanceRecord } from '../../electron/db/repositories/attendance-records'
 import type { AttendanceStatus } from '@/db/schema'
+import { todayIso } from '@/lib/date-utils'
 
 function startOfMonth(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 interface RecordFormState {
@@ -38,7 +35,7 @@ interface RecordFormState {
 }
 
 function emptyForm(defaultSubjectId: string): RecordFormState {
-  return { subjectId: defaultSubjectId, date: today(), period: '1', status: 'present' }
+  return { subjectId: defaultSubjectId, date: todayIso(), period: '1', status: 'present' }
 }
 
 export function AttendancePage() {
@@ -48,7 +45,7 @@ export function AttendancePage() {
 
   const [subjectFilter, setSubjectFilter] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState(startOfMonth())
-  const [dateTo, setDateTo] = useState(today())
+  const [dateTo, setDateTo] = useState(todayIso())
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<AttendanceRecord | null>(null)
   const [form, setForm] = useState<RecordFormState>(emptyForm(''))

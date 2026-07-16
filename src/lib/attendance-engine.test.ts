@@ -4,8 +4,13 @@ import {
   aggregateOverall,
   computeSafeBunkCount,
   computeClassesNeededToReachTarget,
+  enumerateScheduledPeriods,
+  scheduledPeriodsForDates,
+  projectRecords,
+  jsDayToWeekday,
   type PeriodTypeRule,
   type TimetableSlotInput,
+  type TimetableSlotWithSchedule,
   type AttendanceRecordInput,
   type HolidayInput,
   type YellowFormInput,
@@ -113,7 +118,7 @@ describe('computeAttendance', () => {
     const slots = [slot(1, 'class')]
     const records = [record({ slotId: 1, period: 3, status: 'absent' })]
     const yellowForms: YellowFormInput[] = [
-      { subjectId: SUBJECT_ID, date: '2026-01-05', period: 3, status: 'approved' },
+      { id: 1, subjectId: SUBJECT_ID, date: '2026-01-05', period: 3, status: 'approved' },
     ]
 
     const result = computeAttendance({ records, slots, holidays: [], yellowForms, rules: RULES })
@@ -127,7 +132,7 @@ describe('computeAttendance', () => {
     const slots = [slot(1, 'class')]
     const records = [record({ slotId: 1, period: 3, status: 'absent' })]
     const yellowForms: YellowFormInput[] = [
-      { subjectId: SUBJECT_ID, date: '2026-01-05', period: 3, status: 'pending' },
+      { id: 1, subjectId: SUBJECT_ID, date: '2026-01-05', period: 3, status: 'pending' },
     ]
 
     const result = computeAttendance({ records, slots, holidays: [], yellowForms, rules: RULES })
@@ -142,7 +147,7 @@ describe('computeAttendance', () => {
       record({ slotId: 2, period: 2, status: 'absent' }),
     ]
     const yellowForms: YellowFormInput[] = [
-      { subjectId: SUBJECT_ID, date: '2026-01-05', period: null, status: 'approved' },
+      { id: 1, subjectId: SUBJECT_ID, date: '2026-01-05', period: null, status: 'approved' },
     ]
 
     const result = computeAttendance({ records, slots, holidays: [], yellowForms, rules: RULES })
@@ -218,5 +223,164 @@ describe('computeClassesNeededToReachTarget', () => {
 
   it('returns 0 with zero total (nothing attended yet still reads as 100%)', () => {
     expect(computeClassesNeededToReachTarget(0, 0, 75)).toBe(0)
+  })
+})
+
+describe('jsDayToWeekday', () => {
+  it('maps an ISO date string to the timetable weekday, and Sunday to null', () => {
+    // 2026-01-04 is a Sunday, 2026-01-05 is a Monday
+    expect(jsDayToWeekday('2026-01-04')).toBeNull()
+    expect(jsDayToWeekday('2026-01-05')).toBe('mon')
+    expect(jsDayToWeekday('2026-01-10')).toBe('sat')
+  })
+})
+
+describe('enumerateScheduledPeriods', () => {
+  const slots: TimetableSlotWithSchedule[] = [
+    { id: 1, subjectId: SUBJECT_ID, type: 'class', day: 'mon', period: 1 },
+    { id: 2, subjectId: SUBJECT_ID, type: 'class', day: 'wed', period: 1 },
+  ]
+
+  it('expands the weekly timetable across a date range, in date/period order', () => {
+    // 2026-01-05 Mon, 2026-01-07 Wed, 2026-01-12 Mon
+    const result = enumerateScheduledPeriods({
+      slots,
+      holidays: [],
+      startDate: '2026-01-05',
+      endDate: '2026-01-12',
+    })
+
+    expect(result.map((p) => p.date)).toEqual(['2026-01-05', '2026-01-07', '2026-01-12'])
+  })
+
+  it('skips Sundays entirely (no matching weekday slots)', () => {
+    const result = enumerateScheduledPeriods({
+      slots,
+      holidays: [],
+      startDate: '2026-01-04', // Sunday
+      endDate: '2026-01-04',
+    })
+    expect(result).toHaveLength(0)
+  })
+
+  it('excludes a scheduled period that falls on an excluding holiday', () => {
+    const result = enumerateScheduledPeriods({
+      slots,
+      holidays: [{ date: '2026-01-05', type: 'university' }],
+      startDate: '2026-01-05',
+      endDate: '2026-01-05',
+    })
+    expect(result).toHaveLength(0)
+  })
+
+  it('does not exclude a scheduled period on a working_saturday', () => {
+    const satSlots: TimetableSlotWithSchedule[] = [
+      { id: 3, subjectId: SUBJECT_ID, type: 'class', day: 'sat', period: 1 },
+    ]
+    const result = enumerateScheduledPeriods({
+      slots: satSlots,
+      holidays: [{ date: '2026-01-10', type: 'working_saturday' }], // a Saturday
+      startDate: '2026-01-10',
+      endDate: '2026-01-10',
+    })
+    expect(result).toHaveLength(1)
+  })
+})
+
+describe('scheduledPeriodsForDates', () => {
+  it('resolves an arbitrary (non-contiguous) list of dates, skipping non-matching weekdays', () => {
+    const slots: TimetableSlotWithSchedule[] = [
+      { id: 1, subjectId: SUBJECT_ID, type: 'class', day: 'mon', period: 1 },
+    ]
+    // 2026-01-05 is Mon, 2026-01-06 is Tue (no slot), 2026-01-12 is Mon
+    const result = scheduledPeriodsForDates({
+      slots,
+      holidays: [],
+      dates: ['2026-01-05', '2026-01-06', '2026-01-12'],
+    })
+    expect(result.map((p) => p.date)).toEqual(['2026-01-05', '2026-01-12'])
+  })
+})
+
+describe('projectRecords + computeAttendance (simulator scenarios)', () => {
+  const slots: TimetableSlotWithSchedule[] = [
+    { id: 1, subjectId: SUBJECT_ID, type: 'class', day: 'mon', period: 1 },
+  ]
+
+  it('projects "attend everything remaining" as an improvement over the baseline', () => {
+    const pastRecords: AttendanceRecordInput[] = [
+      { subjectId: SUBJECT_ID, date: '2026-01-05', period: 1, status: 'absent', slotId: 1 },
+    ]
+    const future = enumerateScheduledPeriods({
+      slots,
+      holidays: [],
+      startDate: '2026-01-12',
+      endDate: '2026-01-26',
+    })
+    const hypothetical = projectRecords(future, 'present')
+
+    const baseline = computeAttendance({
+      records: pastRecords,
+      slots,
+      holidays: [],
+      yellowForms: [],
+      rules: RULES,
+    })
+    const projected = computeAttendance({
+      records: [...pastRecords, ...hypothetical],
+      slots,
+      holidays: [],
+      yellowForms: [],
+      rules: RULES,
+    })
+
+    expect(baseline.get(SUBJECT_ID)!.overall.percentage).toBe(0)
+    // 1 absent + 3 future Mondays attended = 3/4 = 75%
+    expect(projected.get(SUBJECT_ID)!.overall).toEqual({ total: 4, attended: 3, percentage: 75 })
+  })
+
+  it('projects a leave-for-N-days scenario as a decline', () => {
+    const pastRecords: AttendanceRecordInput[] = [
+      { subjectId: SUBJECT_ID, date: '2026-01-05', period: 1, status: 'present', slotId: 1 },
+    ]
+    const leaveRange = enumerateScheduledPeriods({
+      slots,
+      holidays: [],
+      startDate: '2026-01-12',
+      endDate: '2026-01-12',
+    })
+    const hypothetical = projectRecords(leaveRange, 'absent')
+
+    const projected = computeAttendance({
+      records: [...pastRecords, ...hypothetical],
+      slots,
+      holidays: [],
+      yellowForms: [],
+      rules: RULES,
+    })
+
+    expect(projected.get(SUBJECT_ID)!.overall).toEqual({ total: 2, attended: 1, percentage: 50 })
+  })
+
+  it('projects a yellow form approval by overriding just that form\'s status', () => {
+    const records: AttendanceRecordInput[] = [
+      { subjectId: SUBJECT_ID, date: '2026-01-05', period: 1, status: 'absent', slotId: 1 },
+    ]
+    const forms: YellowFormInput[] = [
+      { id: 42, subjectId: SUBJECT_ID, date: '2026-01-05', period: 1, status: 'pending' },
+    ]
+
+    const baseline = computeAttendance({ records, slots, holidays: [], yellowForms: forms, rules: RULES })
+    expect(baseline.get(SUBJECT_ID)!.overall.attended).toBe(0)
+
+    const withApproval = forms.map((f) => (f.id === 42 ? { ...f, status: 'approved' as const } : f))
+    const projected = computeAttendance({
+      records,
+      slots,
+      holidays: [],
+      yellowForms: withApproval,
+      rules: RULES,
+    })
+    expect(projected.get(SUBJECT_ID)!.overall.attended).toBe(1)
   })
 })

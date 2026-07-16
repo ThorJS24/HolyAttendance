@@ -9,23 +9,9 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useAttendance } from '@/hooks/use-attendance'
-import { computeSafeBunkCount } from '@/lib/attendance-engine'
-import type { Weekday } from '@/db/schema'
+import { computeSafeBunkCount, jsDayToWeekday } from '@/lib/attendance-engine'
+import { todayIso } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
-
-const JS_DAY_TO_WEEKDAY: Record<number, Weekday | null> = {
-  0: null,
-  1: 'mon',
-  2: 'tue',
-  3: 'wed',
-  4: 'thu',
-  5: 'fri',
-  6: 'sat',
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 function percentColor(percent: number | null, target: number): string {
   if (percent === null) return 'text-muted-foreground'
@@ -54,7 +40,7 @@ export function DashboardPage() {
   }, [loadSlots, semester])
 
   const today = todayIso()
-  const todayWeekday = JS_DAY_TO_WEEKDAY[new Date().getDay()]
+  const todayWeekday = jsDayToWeekday(today)
   const todayHoliday = holidays.find((h) => h.date === today && h.type !== 'working_saturday')
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
