@@ -4,6 +4,7 @@ import {
   aggregateOverall,
   computeSafeBunkCount,
   computeClassesNeededToReachTarget,
+  resolveSubjectMinTarget,
   enumerateScheduledPeriods,
   scheduledPeriodsForDates,
   projectRecords,
@@ -207,6 +208,19 @@ describe('computeSafeBunkCount', () => {
 
   it('returns 0 when target is 100%', () => {
     expect(computeSafeBunkCount(40, 40, 100)).toBe(0)
+  })
+})
+
+describe('resolveSubjectMinTarget', () => {
+  it('falls back to the default subject minimum when customMinTarget is null', () => {
+    expect(resolveSubjectMinTarget({ customMinTarget: null }, 75)).toBe(75)
+  })
+
+  it('an override takes precedence over the default', () => {
+    expect(resolveSubjectMinTarget({ customMinTarget: 90 }, 75)).toBe(90)
+    // even when the override is lower than the default - it's still an
+    // explicit choice and must win, not just the "stricter of the two".
+    expect(resolveSubjectMinTarget({ customMinTarget: 50 }, 75)).toBe(50)
   })
 })
 

@@ -5,7 +5,7 @@ import type { SubjectAttendance } from './attendance-engine'
 const SAMPLE_DATA: ReportData = {
   generatedAt: '2026-07-16T00:00:00.000Z',
   semester: '2026-1',
-  minTarget: 75,
+  overallMinTarget: 75,
   overall: { total: 20, attended: 15, percentage: 75 },
   subjects: [
     { name: 'Data Structures', total: 12, attended: 9, percentage: 75, safeBunks: 0 },
@@ -19,14 +19,34 @@ const SAMPLE_DATA: ReportData = {
 }
 
 describe('buildSubjectRows', () => {
-  it('joins subjects with their computed stats and safe-bunk count', () => {
+  it('joins subjects with their computed stats and safe-bunk count, using the default subject target', () => {
     const bySubject = new Map<number, SubjectAttendance>([
       [1, { subjectId: 1, overall: { total: 12, attended: 9, percentage: 75 }, classWork: { total: 12, attended: 9, percentage: 75 }, projectWork: { total: 0, attended: 0, percentage: null } }],
     ])
-    const rows = buildSubjectRows([{ id: 1, name: 'Data Structures' }, { id: 2, name: 'No Data Yet' }], bySubject, 75)
+    const rows = buildSubjectRows(
+      [
+        { id: 1, name: 'Data Structures', customMinTarget: null },
+        { id: 2, name: 'No Data Yet', customMinTarget: null },
+      ],
+      bySubject,
+      75,
+    )
 
     expect(rows[0]).toEqual({ name: 'Data Structures', total: 12, attended: 9, percentage: 75, safeBunks: 0 })
     expect(rows[1]).toEqual({ name: 'No Data Yet', total: 0, attended: 0, percentage: null, safeBunks: 0 })
+  })
+
+  it("uses a subject's override instead of the default when computing safe bunks", () => {
+    const bySubject = new Map<number, SubjectAttendance>([
+      // 9/12 = 75%: 0 safe bunks against a 75% default (floor(9*100/75)-12 = 0),
+      // but 3 against a 60% override (floor(9*100/60)-12 = 15-12 = 3).
+      [1, { subjectId: 1, overall: { total: 12, attended: 9, percentage: 75 }, classWork: { total: 12, attended: 9, percentage: 75 }, projectWork: { total: 0, attended: 0, percentage: null } }],
+    ])
+    const defaultRows = buildSubjectRows([{ id: 1, name: 'Data Structures', customMinTarget: null }], bySubject, 75)
+    const overriddenRows = buildSubjectRows([{ id: 1, name: 'Data Structures', customMinTarget: 60 }], bySubject, 75)
+
+    expect(defaultRows[0].safeBunks).toBe(0)
+    expect(overriddenRows[0].safeBunks).toBe(3)
   })
 })
 

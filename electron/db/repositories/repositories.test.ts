@@ -52,6 +52,23 @@ describe('subjects repository', () => {
     subjectsRepo.deleteSubject(db, created.id)
     expect(subjectsRepo.getSubject(db, created.id)).toBeUndefined()
   })
+
+  it('defaults customMinTarget to null and persists an explicit override', () => {
+    const created = subjectsRepo.createSubject(db, {
+      name: 'Operating Systems',
+      semester: '2026-1',
+      credits: 3,
+      faculty: null,
+      category: null,
+    })
+    expect(created.customMinTarget).toBeNull()
+
+    const overridden = subjectsRepo.updateSubject(db, created.id, { customMinTarget: 60 })
+    expect(overridden.customMinTarget).toBe(60)
+
+    const clearedBackToDefault = subjectsRepo.updateSubject(db, created.id, { customMinTarget: null })
+    expect(clearedBackToDefault.customMinTarget).toBeNull()
+  })
 })
 
 describe('timetable slots repository', () => {
@@ -319,18 +336,25 @@ describe('yellow forms repository', () => {
 })
 
 describe('settings repository', () => {
-  it('ensures a singleton row with defaults and persists updates', () => {
+  it('ensures a singleton row with defaults and persists updates to both targets independently', () => {
     const db = createTestDb()
     const settings = settingsRepo.getSettings(db)
     expect(settings.id).toBe(1)
-    expect(settings.minTarget).toBe(75)
+    expect(settings.overallMinTarget).toBe(75)
+    expect(settings.subjectMinTarget).toBe(75)
 
-    const updated = settingsRepo.updateSettings(db, { minTarget: 80, currentSemester: '2026-1' })
-    expect(updated.minTarget).toBe(80)
+    const updated = settingsRepo.updateSettings(db, {
+      overallMinTarget: 80,
+      subjectMinTarget: 70,
+      currentSemester: '2026-1',
+    })
+    expect(updated.overallMinTarget).toBe(80)
+    expect(updated.subjectMinTarget).toBe(70)
     expect(updated.currentSemester).toBe('2026-1')
 
     // A second ensure/get call must not create a duplicate row.
     settingsRepo.ensureSettingsRow(db)
-    expect(settingsRepo.getSettings(db).minTarget).toBe(80)
+    expect(settingsRepo.getSettings(db).overallMinTarget).toBe(80)
+    expect(settingsRepo.getSettings(db).subjectMinTarget).toBe(70)
   })
 })
