@@ -4,11 +4,12 @@ import { useTimetableStore } from '@/store/timetable-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { usePeriodTypeRulesStore } from '@/store/period-type-rules-store'
+import { useSemestersStore } from '@/store/semesters-store'
 import {
   computeAttendance,
   aggregateOverall,
   jsDayToWeekday,
-  scheduledPeriodsForDates,
+  enumerateScheduledPeriods,
   type SubjectAttendance,
 } from '@/lib/attendance-engine'
 import { autoPresentRecords, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
@@ -43,12 +44,16 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
   const rules = usePeriodTypeRulesStore((s) => s.rules)
   const loadRules = usePeriodTypeRulesStore((s) => s.load)
 
+  const semesters = useSemestersStore((s) => s.semesters)
+  const loadSemesters = useSemestersStore((s) => s.load)
+
   useEffect(() => {
     loadRecords()
     loadHolidays()
     loadYellowForms()
     loadRules()
-  }, [loadRecords, loadHolidays, loadYellowForms, loadRules])
+    loadSemesters()
+  }, [loadRecords, loadHolidays, loadYellowForms, loadRules, loadSemesters])
 
   useEffect(() => {
     if (semester) loadSlots(semester)
@@ -65,13 +70,17 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
   const bySubject = useMemo(() => {
     const today = todayIso()
     const weekday = jsDayToWeekday(today)
-    const todaysPeriods = weekday
-      ? scheduledPeriodsForDates({ slots, holidays, dates: [today] })
-      : []
     const periodEndMinutes = weekday ? buildPeriodEndMinutesForDay(slots, weekday) : new Map()
 
+    // Auto-present applies to every unmarked scheduled period whose time has
+    // passed, not just today's (see day-attendance.ts) — so this has to
+    // enumerate from the semester's start, not just look at "today".
+    const activeSemester = semesters.find((s) => s.label === semester)
+    const startDate = activeSemester && activeSemester.startDate <= today ? activeSemester.startDate : today
+    const scheduledPeriods = enumerateScheduledPeriods({ slots, holidays, startDate, endDate: today })
+
     const autoPresent = autoPresentRecords({
-      scheduledPeriods: todaysPeriods,
+      scheduledPeriods,
       records,
       todayIso: today,
       nowMinutes,
@@ -79,7 +88,7 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
     })
 
     return computeAttendance({ records: [...records, ...autoPresent], slots, holidays, yellowForms, rules })
-  }, [records, slots, holidays, yellowForms, rules, nowMinutes])
+  }, [records, slots, holidays, yellowForms, rules, nowMinutes, semesters, semester])
 
   const overall = useMemo(() => aggregateOverall(bySubject), [bySubject])
 
