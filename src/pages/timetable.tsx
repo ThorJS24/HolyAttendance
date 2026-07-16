@@ -91,9 +91,13 @@ export function TimetablePage() {
     setDialogTarget({ day, period })
   }
 
+  const subjectRequired = form.type !== 'lunch'
+  const subjectMissing = subjectRequired && form.subjectId === 'none'
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!dialogTarget) return
+    if (subjectMissing) return
     const { day, period } = dialogTarget
     const existing = slotAt.get(`${day}:${period}`)
 
@@ -214,13 +218,15 @@ export function TimetablePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="slot-subject">Subject</Label>
+              <Label htmlFor="slot-subject">
+                Subject{subjectRequired && <span className="text-destructive"> *</span>}
+              </Label>
               <Select value={form.subjectId} onValueChange={(v) => setForm({ ...form, subjectId: v })}>
                 <SelectTrigger id="slot-subject">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
+                  {!subjectRequired && <SelectItem value="none">None</SelectItem>}
                   {subjects.map((s) => (
                     <SelectItem key={s.id} value={String(s.id)}>
                       {s.name}
@@ -228,6 +234,12 @@ export function TimetablePage() {
                   ))}
                 </SelectContent>
               </Select>
+              {subjectMissing && (
+                <p className="text-xs text-destructive">
+                  A subject is required so attendance can be marked for this period — only lunch can be left
+                  unassigned.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -259,7 +271,7 @@ export function TimetablePage() {
                 <Button type="button" variant="outline" onClick={() => setDialogTarget(null)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saving}>
+                <Button type="submit" disabled={saving || subjectMissing}>
                   Save
                 </Button>
               </div>

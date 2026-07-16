@@ -251,37 +251,50 @@ function CalendarGrid() {
           </Button>
 
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Scheduled classes</h3>
+            <h3 className="text-sm font-semibold">Scheduled periods</h3>
             {selected?.slots.length === 0 && (
-              <p className="text-sm text-muted-foreground">No classes scheduled.</p>
+              <p className="text-sm text-muted-foreground">No periods scheduled.</p>
             )}
             {selected?.slots.map((slot) => {
               const subjectName = slot.subjectId ? subjectsById.get(slot.subjectId)?.name : slot.type
               const record = selected.records.find(
                 (r) => r.subjectId === slot.subjectId && r.period === slot.period,
               )
+              const isLunch = slot.type === 'lunch'
               return (
-                <div key={slot.id} className="flex items-center justify-between rounded-md border p-2">
-                  <span className="text-sm">
-                    P{slot.period} · {subjectName ?? slot.type}
-                  </span>
-                  {slot.subjectId !== null && (
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant={record?.status === 'present' ? 'default' : 'outline'}
-                        onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'present')}
-                      >
-                        Present
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={record?.status === 'absent' ? 'destructive' : 'outline'}
-                        onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'absent')}
-                      >
-                        Absent
-                      </Button>
-                    </div>
+                <div key={slot.id} className="rounded-md border p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">
+                      P{slot.period} · {subjectName ?? slot.type}
+                    </span>
+                    {!isLunch && slot.subjectId !== null && (
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant={record?.status === 'present' ? 'default' : 'outline'}
+                          onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'present')}
+                        >
+                          Present
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={record?.status === 'absent' ? 'destructive' : 'outline'}
+                          onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'absent')}
+                        >
+                          Absent
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  {!isLunch && slot.subjectId === null && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No subject assigned to this period — assign one in Timetable to mark attendance.
+                    </p>
+                  )}
+                  {slot.type === 'meeting' && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Excluded from attendance % (meetings don't count toward totals), but still logged.
+                    </p>
                   )}
                 </div>
               )
