@@ -127,6 +127,7 @@ export const settings = sqliteTable('settings', {
   currentSemester: text('current_semester').notNull().default(''),
   backupIntervalDays: integer('backup_interval_days').notNull().default(7),
   backupDir: text('backup_dir'),
+  lastBackupAt: integer('last_backup_at', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),

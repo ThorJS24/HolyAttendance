@@ -3,6 +3,7 @@ import path from 'node:path'
 import { initDb, closeDb } from './db/client'
 import { registerIpcHandlers } from './ipc/register'
 import { settingsRepo, periodTypeRulesRepo } from './db/repositories'
+import { runScheduledBackupIfDue } from './backup'
 
 // Populated by vite-plugin-electron during `npm run dev`.
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -40,6 +41,7 @@ app.whenReady().then(() => {
   settingsRepo.ensureSettingsRow(db)
   periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
   registerIpcHandlers(db)
+  runScheduledBackupIfDue(db)
   createWindow()
 
   app.on('activate', () => {

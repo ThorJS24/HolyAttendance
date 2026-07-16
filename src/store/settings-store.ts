@@ -6,6 +6,7 @@ interface SettingsState {
   theme: string
   backupIntervalDays: number
   backupDir: string | null
+  lastBackupAt: Date | null
   loaded: boolean
   load: () => Promise<void>
   setMinTarget: (value: number) => Promise<void>
@@ -21,6 +22,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   theme: 'system',
   backupIntervalDays: 7,
   backupDir: null,
+  lastBackupAt: null,
   loaded: false,
 
   load: async () => {
@@ -31,6 +33,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       theme: settings.theme,
       backupIntervalDays: settings.backupIntervalDays,
       backupDir: settings.backupDir ?? null,
+      lastBackupAt: settings.lastBackupAt ?? null,
       loaded: true,
     })
   },

@@ -61,6 +61,10 @@ export const IPC_CHANNELS = {
   periodTypeRulesSetBucket: 'periodTypeRules:setBucket',
 
   filesSaveFile: 'files:saveFile',
+
+  backupNow: 'backup:now',
+  backupRestore: 'backup:restore',
+  backupChooseDir: 'backup:chooseDir',
 } as const
 
 export interface BunkMateApi {
@@ -128,5 +132,18 @@ export interface BunkMateApi {
       content: ArrayBuffer | string
       filters: { name: string; extensions: string[] }[]
     }) => Promise<string | null>
+  }
+
+  backup: {
+    /** Opens a save dialog and writes a checkpointed copy of the live DB there. */
+    now: () => Promise<string | null>
+    /**
+     * Opens an open-file dialog, replaces the live DB with the chosen file,
+     * and relaunches the app. Returns false if the user cancelled the
+     * dialog (the app is not relaunched in that case).
+     */
+    restore: () => Promise<boolean>
+    /** Opens a directory picker; returns the chosen path, or null if cancelled. */
+    chooseDir: () => Promise<string | null>
   }
 }

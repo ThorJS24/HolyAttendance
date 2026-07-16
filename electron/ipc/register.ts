@@ -1,7 +1,8 @@
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, app } from 'electron'
 import fs from 'node:fs'
 import type { AppDatabase } from '../db/client'
 import { IPC_CHANNELS } from './contract'
+import { backupNow, restoreFrom, defaultBackupFileName } from '../backup'
 import {
   subjectsRepo,
   timetableSlotsRepo,
@@ -96,4 +97,33 @@ export function registerIpcHandlers(db: AppDatabase): void {
       return result.filePath
     },
   )
+
+  ipcMain.handle(IPC_CHANNELS.backupNow, async () => {
+    const result = await dialog.showSaveDialog({
+      defaultPath: defaultBackupFileName(),
+      filters: [{ name: 'SQLite database', extensions: ['db'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    backupNow(result.filePath)
+    settingsRepo.updateSettings(db, { lastBackupAt: new Date() })
+    return result.filePath
+  })
+
+  ipcMain.handle(IPC_CHANNELS.backupRestore, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'SQLite database', extensions: ['db'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return false
+    restoreFrom(result.filePaths[0])
+    app.relaunch()
+    app.exit(0)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.backupChooseDir, async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
 }

@@ -65,6 +65,12 @@ const api: BunkMateApi = {
   files: {
     saveFile: (opts) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveFile, opts),
   },
+
+  backup: {
+    now: () => ipcRenderer.invoke(IPC_CHANNELS.backupNow),
+    restore: () => ipcRenderer.invoke(IPC_CHANNELS.backupRestore),
+    chooseDir: () => ipcRenderer.invoke(IPC_CHANNELS.backupChooseDir),
+  },
 }
 
 contextBridge.exposeInMainWorld('bunkmate', api)

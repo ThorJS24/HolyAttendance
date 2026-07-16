@@ -9,6 +9,7 @@ export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
 
 let dbInstance: AppDatabase | null = null
 let sqliteInstance: Database.Database | null = null
+let currentDbPath: string | null = null
 
 export function getDbPath(userDataDir: string): string {
   return path.join(userDataDir, 'bunkmate.db')
@@ -32,6 +33,7 @@ export function initDb(userDataDir: string): AppDatabase {
   }
 
   sqliteInstance = sqlite
+  currentDbPath = dbPath
   const db = drizzle(sqlite, { schema })
 
   const migrationsFolder = path.join(__dirname, 'migrations')
@@ -47,4 +49,14 @@ export function closeDb(): void {
   sqliteInstance?.close()
   sqliteInstance = null
   dbInstance = null
+}
+
+export function getRawSqlite(): Database.Database {
+  if (!sqliteInstance) throw new Error('Database not initialized')
+  return sqliteInstance
+}
+
+export function getCurrentDbPath(): string {
+  if (!currentDbPath) throw new Error('Database not initialized')
+  return currentDbPath
 }
