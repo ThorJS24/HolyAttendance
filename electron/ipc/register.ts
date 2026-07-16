@@ -9,6 +9,7 @@ import {
   leavePlansRepo,
   yellowFormsRepo,
   settingsRepo,
+  periodTypeRulesRepo,
 } from '../db/repositories'
 
 export function registerIpcHandlers(db: AppDatabase): void {
@@ -75,4 +76,9 @@ export function registerIpcHandlers(db: AppDatabase): void {
 
   ipcMain.handle(IPC_CHANNELS.settingsGet, () => settingsRepo.getSettings(db))
   ipcMain.handle(IPC_CHANNELS.settingsUpdate, (_e, input) => settingsRepo.updateSettings(db, input))
+
+  ipcMain.handle(IPC_CHANNELS.periodTypeRulesList, () => periodTypeRulesRepo.listPeriodTypeRules(db))
+  ipcMain.handle(IPC_CHANNELS.periodTypeRulesSetBucket, (_e, type, bucket) =>
+    periodTypeRulesRepo.setPeriodTypeRuleBucket(db, type, bucket),
+  )
 }

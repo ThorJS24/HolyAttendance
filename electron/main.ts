@@ -2,7 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import { initDb, closeDb } from './db/client'
 import { registerIpcHandlers } from './ipc/register'
-import { settingsRepo } from './db/repositories'
+import { settingsRepo, periodTypeRulesRepo } from './db/repositories'
 
 // Populated by vite-plugin-electron during `npm run dev`.
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -38,6 +38,7 @@ function createWindow() {
 app.whenReady().then(() => {
   const db = initDb(app.getPath('userData'))
   settingsRepo.ensureSettingsRow(db)
+  periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
   registerIpcHandlers(db)
   createWindow()
 

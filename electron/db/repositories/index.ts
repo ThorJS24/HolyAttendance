@@ -1,4 +1,5 @@
 export * as subjectsRepo from './subjects'
+export * as periodTypeRulesRepo from './period-type-rules'
 export * as timetableSlotsRepo from './timetable-slots'
 export * as attendanceRecordsRepo from './attendance-records'
 export * as holidaysRepo from './holidays'

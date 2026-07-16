@@ -18,6 +18,7 @@ import type { Holiday, NewHoliday, HolidayUpdate } from '../db/repositories/holi
 import type { LeavePlan, NewLeavePlan, LeavePlanUpdate } from '../db/repositories/leave-plans'
 import type { YellowForm, NewYellowForm, YellowFormUpdate } from '../db/repositories/yellow-forms'
 import type { Settings, SettingsUpdate } from '../db/repositories/settings'
+import type { PeriodTypeRule } from '../db/repositories/period-type-rules'
 
 export const IPC_CHANNELS = {
   subjectsList: 'subjects:list',
@@ -55,6 +56,9 @@ export const IPC_CHANNELS = {
 
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
+
+  periodTypeRulesList: 'periodTypeRules:list',
+  periodTypeRulesSetBucket: 'periodTypeRules:setBucket',
 } as const
 
 export interface BunkMateApi {
@@ -108,5 +112,10 @@ export interface BunkMateApi {
   settings: {
     get: () => Promise<Settings>
     update: (input: SettingsUpdate) => Promise<Settings>
+  }
+
+  periodTypeRules: {
+    list: () => Promise<PeriodTypeRule[]>
+    setBucket: (type: PeriodTypeRule['type'], bucket: PeriodTypeRule['bucket']) => Promise<PeriodTypeRule>
   }
 }
