@@ -19,13 +19,15 @@ import { useToastStore } from '@/store/toast-store'
 
 export function SettingsPage() {
   const {
-    minTarget,
+    overallMinTarget,
+    subjectMinTarget,
     currentSemester,
     theme,
     backupIntervalDays,
     backupDir,
     lastBackupAt,
-    setMinTarget,
+    setOverallMinTarget,
+    setSubjectMinTarget,
     setCurrentSemester,
     setTheme,
     setBackupIntervalDays,
@@ -34,7 +36,8 @@ export function SettingsPage() {
   } = useSettingsStore()
   const pushToast = useToastStore((s) => s.push)
 
-  const [minTargetInput, setMinTargetInput] = useState(String(minTarget))
+  const [overallMinTargetInput, setOverallMinTargetInput] = useState(String(overallMinTarget))
+  const [subjectMinTargetInput, setSubjectMinTargetInput] = useState(String(subjectMinTarget))
   const [semesterInput, setSemesterInput] = useState(currentSemester)
   const [intervalInput, setIntervalInput] = useState(String(backupIntervalDays))
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
@@ -78,23 +81,43 @@ export function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Attendance</CardTitle>
-          <CardDescription>The minimum percentage used for warnings and safe-bunk counts.</CardDescription>
+          <CardDescription>
+            Overall applies to the dashboard's total attendance; the subject default applies to each subject
+            unless it has its own override.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex items-end gap-3">
+        <CardContent className="flex flex-wrap items-end gap-3">
           <div className="space-y-2">
-            <Label htmlFor="min-target">Target %</Label>
+            <Label htmlFor="overall-min-target">Overall minimum %</Label>
             <Input
-              id="min-target"
+              id="overall-min-target"
               type="number"
               min={0}
               max={100}
               className="w-28"
-              value={minTargetInput}
-              onChange={(e) => setMinTargetInput(e.target.value)}
+              value={overallMinTargetInput}
+              onChange={(e) => setOverallMinTargetInput(e.target.value)}
               onBlur={() => {
-                const clamped = Math.min(100, Math.max(0, Number(minTargetInput) || 0))
-                setMinTargetInput(String(clamped))
-                setMinTarget(clamped)
+                const clamped = Math.min(100, Math.max(0, Number(overallMinTargetInput) || 0))
+                setOverallMinTargetInput(String(clamped))
+                setOverallMinTarget(clamped)
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="subject-min-target">Default subject minimum %</Label>
+            <Input
+              id="subject-min-target"
+              type="number"
+              min={0}
+              max={100}
+              className="w-28"
+              value={subjectMinTargetInput}
+              onChange={(e) => setSubjectMinTargetInput(e.target.value)}
+              onBlur={() => {
+                const clamped = Math.min(100, Math.max(0, Number(subjectMinTargetInput) || 0))
+                setSubjectMinTargetInput(String(clamped))
+                setSubjectMinTarget(clamped)
               }}
             />
           </div>

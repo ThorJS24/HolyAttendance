@@ -31,15 +31,18 @@ interface SubjectFormState {
   credits: string
   faculty: string
   category: string
+  /** Blank means "inherit the default subject minimum" (customMinTarget: null). */
+  customMinTarget: string
 }
 
 function emptyForm(defaultSemester: string): SubjectFormState {
-  return { name: '', semester: defaultSemester, credits: '3', faculty: '', category: 'core' }
+  return { name: '', semester: defaultSemester, credits: '3', faculty: '', category: 'core', customMinTarget: '' }
 }
 
 export function SubjectsPage() {
   const { subjects, loading, load, create, update, setArchived, remove } = useSubjectsStore()
   const currentSemester = useSettingsStore((s) => s.currentSemester)
+  const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
   const pushToast = useToastStore((s) => s.push)
 
   const [showArchived, setShowArchived] = useState(false)
@@ -83,6 +86,7 @@ export function SubjectsPage() {
       credits: String(subject.credits),
       faculty: subject.faculty ?? '',
       category: subject.category ?? 'core',
+      customMinTarget: subject.customMinTarget === null ? '' : String(subject.customMinTarget),
     })
     setDialogOpen(true)
   }
@@ -99,6 +103,8 @@ export function SubjectsPage() {
         credits: Math.max(0, Number(form.credits) || 0),
         faculty: form.faculty.trim() || null,
         category: form.category || null,
+        customMinTarget:
+          form.customMinTarget.trim() === '' ? null : Math.min(100, Math.max(0, Number(form.customMinTarget))),
       }
       if (editing) {
         await update(editing.id, payload)
@@ -301,6 +307,18 @@ export function SubjectsPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-min-target">Override minimum % (optional)</Label>
+              <Input
+                id="custom-min-target"
+                type="number"
+                min={0}
+                max={100}
+                value={form.customMinTarget}
+                onChange={(e) => setForm({ ...form, customMinTarget: e.target.value })}
+                placeholder={`Default: ${subjectMinTarget}%`}
+              />
             </div>
 
             <DialogFooter>

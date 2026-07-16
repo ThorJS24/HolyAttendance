@@ -52,7 +52,8 @@ const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 export function AnalyticsPage() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const currentSemester = useSettingsStore((s) => s.currentSemester)
-  const minTarget = useSettingsStore((s) => s.minTarget)
+  const overallMinTarget = useSettingsStore((s) => s.overallMinTarget)
+  const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
   const semester = currentSemester || null
 
   const records = useAttendanceStore((s) => s.records)
@@ -72,7 +73,10 @@ export function AnalyticsPage() {
     loadPlans()
   }, [loadSubjects, loadPlans])
 
-  const subjectRows = useMemo(() => buildSubjectRows(subjects, bySubject, minTarget), [subjects, bySubject, minTarget])
+  const subjectRows = useMemo(
+    () => buildSubjectRows(subjects, bySubject, subjectMinTarget),
+    [subjects, bySubject, subjectMinTarget],
+  )
 
   const barData = useMemo(
     () =>
@@ -115,7 +119,7 @@ export function AnalyticsPage() {
         {
           generatedAt: new Date().toISOString(),
           semester: currentSemester || '—',
-          minTarget,
+          overallMinTarget,
           overall,
           subjects: subjectRows,
           attendanceHistory: [...records]
@@ -161,7 +165,10 @@ export function AnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Subject-wise attendance</CardTitle>
-          <CardDescription>Current overall percentage per subject, against the {minTarget}% target.</CardDescription>
+          <CardDescription>
+            Current overall percentage per subject, against the {subjectMinTarget}% default subject target
+            (subjects with their own override may use a different one).
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={280}>
@@ -169,7 +176,7 @@ export function AnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
               <XAxis dataKey="name" stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
               <YAxis domain={[0, 100]} stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
-              <ReferenceLine y={minTarget} stroke="var(--warning)" strokeDasharray="4 4" />
+              <ReferenceLine y={subjectMinTarget} stroke="var(--warning)" strokeDasharray="4 4" />
               <Tooltip
                 formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Attendance']}
                 contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8 }}
@@ -211,7 +218,7 @@ export function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
                 <XAxis dataKey="bucket" stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
                 <YAxis domain={[0, 100]} stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
-                <ReferenceLine y={minTarget} stroke="var(--warning)" strokeDasharray="4 4" />
+                <ReferenceLine y={overallMinTarget} stroke="var(--warning)" strokeDasharray="4 4" />
                 <Tooltip
                   formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Overall']}
                   contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8 }}

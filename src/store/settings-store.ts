@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 
 interface SettingsState {
-  minTarget: number
+  overallMinTarget: number
+  subjectMinTarget: number
   currentSemester: string
   theme: string
   backupIntervalDays: number
@@ -9,7 +10,8 @@ interface SettingsState {
   lastBackupAt: Date | null
   loaded: boolean
   load: () => Promise<void>
-  setMinTarget: (value: number) => Promise<void>
+  setOverallMinTarget: (value: number) => Promise<void>
+  setSubjectMinTarget: (value: number) => Promise<void>
   setCurrentSemester: (value: string) => Promise<void>
   setTheme: (value: string) => Promise<void>
   setBackupIntervalDays: (value: number) => Promise<void>
@@ -17,7 +19,8 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
-  minTarget: 75,
+  overallMinTarget: 75,
+  subjectMinTarget: 75,
   currentSemester: '',
   theme: 'system',
   backupIntervalDays: 7,
@@ -28,7 +31,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   load: async () => {
     const settings = await window.bunkmate.settings.get()
     set({
-      minTarget: settings.minTarget,
+      overallMinTarget: settings.overallMinTarget,
+      subjectMinTarget: settings.subjectMinTarget,
       currentSemester: settings.currentSemester,
       theme: settings.theme,
       backupIntervalDays: settings.backupIntervalDays,
@@ -38,9 +42,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     })
   },
 
-  setMinTarget: async (minTarget) => {
-    await window.bunkmate.settings.update({ minTarget })
-    set({ minTarget })
+  setOverallMinTarget: async (overallMinTarget) => {
+    await window.bunkmate.settings.update({ overallMinTarget })
+    set({ overallMinTarget })
+  },
+  setSubjectMinTarget: async (subjectMinTarget) => {
+    await window.bunkmate.settings.update({ subjectMinTarget })
+    set({ subjectMinTarget })
   },
   setCurrentSemester: async (currentSemester) => {
     await window.bunkmate.settings.update({ currentSemester })

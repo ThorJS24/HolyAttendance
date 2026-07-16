@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useAttendance } from '@/hooks/use-attendance'
-import { computeSafeBunkCount, jsDayToWeekday } from '@/lib/attendance-engine'
+import { computeSafeBunkCount, resolveSubjectMinTarget, jsDayToWeekday } from '@/lib/attendance-engine'
 import { todayIso } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
 
@@ -23,7 +23,8 @@ function percentColor(percent: number | null, target: number): string {
 export function DashboardPage() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const currentSemester = useSettingsStore((s) => s.currentSemester)
-  const minTarget = useSettingsStore((s) => s.minTarget)
+  const overallMinTarget = useSettingsStore((s) => s.overallMinTarget)
+  const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
   const { holidays, load: loadHolidays } = useHolidaysStore()
   const { slots, load: loadSlots } = useTimetableStore()
 
@@ -68,15 +69,16 @@ export function DashboardPage() {
         .map((subject) => {
           const stats = bySubject.get(subject.id)
           const overallStats = stats?.overall ?? { total: 0, attended: 0, percentage: null }
-          const safeBunks = computeSafeBunkCount(overallStats.attended, overallStats.total, minTarget)
-          return { subject, stats, overallStats, safeBunks }
+          const resolvedTarget = resolveSubjectMinTarget(subject, subjectMinTarget)
+          const safeBunks = computeSafeBunkCount(overallStats.attended, overallStats.total, resolvedTarget)
+          return { subject, stats, overallStats, resolvedTarget, safeBunks }
         })
         .sort((a, b) => (a.overallStats.percentage ?? 100) - (b.overallStats.percentage ?? 100)),
-    [subjects, bySubject, minTarget],
+    [subjects, bySubject, subjectMinTarget],
   )
 
   const belowTarget = subjectRows.filter(
-    (row) => row.overallStats.percentage !== null && row.overallStats.percentage < minTarget,
+    (row) => row.overallStats.percentage !== null && row.overallStats.percentage < row.resolvedTarget,
   )
 
   return (
@@ -87,14 +89,14 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardDescription>Overall attendance</CardDescription>
-            <CardTitle className={cn('text-3xl', percentColor(overall.percentage, minTarget))}>
+            <CardTitle className={cn('text-3xl', percentColor(overall.percentage, overallMinTarget))}>
               {overall.percentage === null ? '—' : `${overall.percentage.toFixed(1)}%`}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <Progress value={overall.percentage ?? 0} />
             <p className="mt-2 text-xs text-muted-foreground">
-              {overall.attended} / {overall.total} periods attended · target {minTarget}%
+              {overall.attended} / {overall.total} periods attended · target {overallMinTarget}%
             </p>
           </CardContent>
         </Card>
@@ -142,11 +144,11 @@ export function DashboardPage() {
                 No subjects yet. <Link to="/subjects" className="underline">Add one</Link>.
               </p>
             )}
-            {subjectRows.map(({ subject, overallStats, safeBunks }) => (
+            {subjectRows.map(({ subject, overallStats, resolvedTarget, safeBunks }) => (
               <div key={subject.id} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">{subject.name}</span>
-                  <span className={cn('tabular-nums', percentColor(overallStats.percentage, minTarget))}>
+                  <span className={cn('tabular-nums', percentColor(overallStats.percentage, resolvedTarget))}>
                     {overallStats.percentage === null ? '—' : `${overallStats.percentage.toFixed(1)}%`}
                   </span>
                 </div>

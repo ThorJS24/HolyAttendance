@@ -1,4 +1,4 @@
-import { computeSafeBunkCount } from './attendance-engine'
+import { computeSafeBunkCount, resolveSubjectMinTarget } from './attendance-engine'
 import type { SubjectAttendance } from './attendance-engine'
 
 export interface ReportSubjectRow {
@@ -26,7 +26,7 @@ export interface ReportLeaveRow {
 export interface ReportData {
   generatedAt: string
   semester: string
-  minTarget: number
+  overallMinTarget: number
   overall: { total: number; attended: number; percentage: number | null }
   subjects: ReportSubjectRow[]
   attendanceHistory: ReportAttendanceRow[]
@@ -34,18 +34,19 @@ export interface ReportData {
 }
 
 export function buildSubjectRows(
-  subjects: { id: number; name: string }[],
+  subjects: { id: number; name: string; customMinTarget: number | null }[],
   bySubject: Map<number, SubjectAttendance>,
-  minTarget: number,
+  defaultSubjectMinTarget: number,
 ): ReportSubjectRow[] {
   return subjects.map((s) => {
     const stats = bySubject.get(s.id)?.overall ?? { total: 0, attended: 0, percentage: null }
+    const target = resolveSubjectMinTarget(s, defaultSubjectMinTarget)
     return {
       name: s.name,
       total: stats.total,
       attended: stats.attended,
       percentage: stats.percentage,
-      safeBunks: computeSafeBunkCount(stats.attended, stats.total, minTarget),
+      safeBunks: computeSafeBunkCount(stats.attended, stats.total, target),
     }
   })
 }
@@ -93,7 +94,7 @@ export async function buildExcelBuffer(data: ReportData): Promise<ArrayBuffer> {
   const summary = workbook.addWorksheet('Summary')
   summary.addRow(['Generated', data.generatedAt])
   summary.addRow(['Semester', data.semester])
-  summary.addRow(['Target %', data.minTarget])
+  summary.addRow(['Overall target %', data.overallMinTarget])
   summary.addRow([])
   summary.addRow(['Overall total', 'Overall attended', 'Overall %'])
   summary.addRow([data.overall.total, data.overall.attended, data.overall.percentage?.toFixed(1) ?? ''])
@@ -127,7 +128,7 @@ export async function buildPdfBuffer(data: ReportData): Promise<ArrayBuffer> {
   doc.setFontSize(16)
   doc.text('BunkMate Pro — Attendance Report', 14, 16)
   doc.setFontSize(10)
-  doc.text(`Generated ${data.generatedAt} · Semester ${data.semester} · Target ${data.minTarget}%`, 14, 22)
+  doc.text(`Generated ${data.generatedAt} · Semester ${data.semester} · Overall target ${data.overallMinTarget}%`, 14, 22)
   doc.text(
     `Overall: ${data.overall.attended}/${data.overall.total} (${data.overall.percentage?.toFixed(1) ?? '—'}%)`,
     14,
