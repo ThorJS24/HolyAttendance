@@ -1,10 +1,322 @@
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { useSubjectsStore } from '@/store/subjects-store'
+import { useSettingsStore } from '@/store/settings-store'
+import { useTimetableStore } from '@/store/timetable-store'
+import { useAttendanceStore } from '@/store/attendance-store'
+import { useHolidaysStore } from '@/store/holidays-store'
+import { useLeavePlansStore } from '@/store/leave-plans-store'
+import { useToastStore } from '@/store/toast-store'
+import { jsDayToWeekday } from '@/lib/attendance-engine'
+import { todayIso } from '@/lib/date-utils'
+import { HolidaysTab } from '@/pages/holidays-tab'
+import { YellowFormsTab } from '@/pages/yellow-forms-tab'
+import { cn } from '@/lib/utils'
+
+const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function toIso(year: number, month: number, day: number): string {
+  return `${year}-${pad(month + 1)}-${pad(day)}`
+}
+
+interface DayCell {
+  iso: string
+  day: number
+  inMonth: boolean
+}
+
+function buildMonthGrid(year: number, month: number): DayCell[] {
+  const startWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay()
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const daysInPrevMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7
+
+  const cells: DayCell[] = []
+  for (let i = 0; i < totalCells; i++) {
+    const dayNum = i - startWeekday + 1
+    if (dayNum < 1) {
+      const day = daysInPrevMonth + dayNum
+      const d = new Date(Date.UTC(year, month - 1, day))
+      cells.push({ iso: toIso(d.getUTCFullYear(), d.getUTCMonth(), day), day, inMonth: false })
+    } else if (dayNum > daysInMonth) {
+      const day = dayNum - daysInMonth
+      const d = new Date(Date.UTC(year, month + 1, day))
+      cells.push({ iso: toIso(d.getUTCFullYear(), d.getUTCMonth(), day), day, inMonth: false })
+    } else {
+      cells.push({ iso: toIso(year, month, dayNum), day: dayNum, inMonth: true })
+    }
+  }
+  return cells
+}
+
+function CalendarGrid() {
+  const today = todayIso()
+  const [cursor, setCursor] = useState(() => {
+    const [y, m] = today.split('-').map(Number)
+    return { year: y, month: m - 1 }
+  })
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+
+  const { subjects, load: loadSubjects } = useSubjectsStore()
+  const currentSemester = useSettingsStore((s) => s.currentSemester)
+  const { slots, load: loadSlots } = useTimetableStore()
+  const { records, load: loadRecords, create: createRecord, update: updateRecord } = useAttendanceStore()
+  const { holidays, load: loadHolidays, create: createHoliday, remove: removeHoliday } = useHolidaysStore()
+  const { plans, load: loadPlans } = useLeavePlansStore()
+  const pushToast = useToastStore((s) => s.push)
+
+  useEffect(() => {
+    loadSubjects({ includeArchived: false })
+    loadRecords()
+    loadHolidays()
+    loadPlans()
+  }, [loadSubjects, loadRecords, loadHolidays, loadPlans])
+
+  useEffect(() => {
+    if (currentSemester) loadSlots(currentSemester)
+  }, [loadSlots, currentSemester])
+
+  const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
+  const holidaysByDate = useMemo(() => new Map(holidays.map((h) => [h.date, h])), [holidays])
+  const recordsByDate = useMemo(() => {
+    const map = new Map<string, typeof records>()
+    for (const r of records) {
+      const list = map.get(r.date) ?? []
+      list.push(r)
+      map.set(r.date, list)
+    }
+    return map
+  }, [records])
+  const leaveDates = useMemo(() => {
+    const set = new Set<string>()
+    for (const plan of plans) {
+      if (plan.status === 'cancelled') continue
+      for (const d of plan.dates) set.add(d)
+    }
+    return set
+  }, [plans])
+
+  const cells = useMemo(() => buildMonthGrid(cursor.year, cursor.month), [cursor])
+
+  function slotsForDate(iso: string) {
+    const weekday = jsDayToWeekday(iso)
+    if (!weekday) return []
+    return slots.filter((s) => s.day === weekday)
+  }
+
+  const selected = selectedDate
+    ? {
+        iso: selectedDate,
+        holiday: holidaysByDate.get(selectedDate),
+        slots: slotsForDate(selectedDate),
+        records: recordsByDate.get(selectedDate) ?? [],
+        onLeave: leaveDates.has(selectedDate),
+      }
+    : null
+
+  async function toggleAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
+    if (!selectedDate) return
+    const slot = slots.find((s) => s.id === slotId)
+    if (!slot) return
+    const existing = selected?.records.find((r) => r.subjectId === subjectId && r.period === slot.period)
+    if (existing) {
+      await updateRecord(existing.id, { status })
+    } else {
+      await createRecord({
+        subjectId,
+        date: selectedDate,
+        period: slot.period,
+        status,
+        source: 'manual',
+        slotId,
+      })
+    }
+    pushToast({ title: `Marked ${status}` })
+  }
+
+  async function toggleHoliday() {
+    if (!selectedDate) return
+    if (selected?.holiday) {
+      await removeHoliday(selected.holiday.id)
+      pushToast({ title: 'Holiday removed' })
+    } else {
+      await createHoliday({ date: selectedDate, type: 'custom', label: null })
+      pushToast({ title: 'Marked as holiday' })
+    }
+  }
+
+  const monthLabel = new Date(Date.UTC(cursor.year, cursor.month, 1)).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => setCursor((c) => (c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }))}
+            aria-label="Previous month"
+          >
+            <ChevronLeft />
+          </Button>
+          <h2 className="w-40 text-center text-lg font-semibold">{monthLabel}</h2>
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => setCursor((c) => (c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 }))}
+            aria-label="Next month"
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 rounded-lg border p-2">
+        {WEEKDAY_HEADERS.map((label) => (
+          <div key={label} className="p-1 text-center text-xs font-medium text-muted-foreground">
+            {label}
+          </div>
+        ))}
+        {cells.map((cell) => {
+          const holiday = holidaysByDate.get(cell.iso)
+          const dayRecords = recordsByDate.get(cell.iso) ?? []
+          const scheduled = cell.inMonth ? slotsForDate(cell.iso) : []
+          const onLeave = leaveDates.has(cell.iso)
+          return (
+            <button
+              key={cell.iso}
+              type="button"
+              onClick={() => setSelectedDate(cell.iso)}
+              className={cn(
+                'flex h-20 flex-col items-start gap-1 rounded-md border border-transparent p-1.5 text-left transition-colors hover:border-border hover:bg-accent',
+                !cell.inMonth && 'opacity-40',
+                cell.iso === todayIso() && 'ring-1 ring-primary',
+              )}
+            >
+              <span className="text-xs font-medium">{cell.day}</span>
+              <div className="flex flex-wrap gap-1">
+                {holiday && (
+                  <Badge variant={holiday.type === 'working_saturday' ? 'outline' : 'warning'} className="px-1 text-[10px]">
+                    {holiday.type === 'working_saturday' ? 'working' : 'holiday'}
+                  </Badge>
+                )}
+                {onLeave && (
+                  <Badge variant="secondary" className="px-1 text-[10px]">
+                    leave
+                  </Badge>
+                )}
+                {!holiday && scheduled.length > 0 && (
+                  <Badge variant="outline" className="px-1 text-[10px]">
+                    {scheduled.length} class{scheduled.length === 1 ? '' : 'es'}
+                  </Badge>
+                )}
+                {dayRecords.length > 0 && (
+                  <Badge variant="default" className="px-1 text-[10px]">
+                    {dayRecords.filter((r) => r.status === 'present').length}/{dayRecords.length}
+                  </Badge>
+                )}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelectedDate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selected?.iso}</DialogTitle>
+            <DialogDescription>
+              {selected?.onLeave && 'Part of a saved leave plan. '}
+              {selected?.holiday
+                ? `Holiday: ${selected.holiday.label ?? selected.holiday.type}`
+                : 'Not marked as a holiday.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Button type="button" variant="outline" size="sm" onClick={toggleHoliday} className="w-fit">
+            {selected?.holiday ? 'Remove holiday' : 'Mark as holiday'}
+          </Button>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">Scheduled classes</h3>
+            {selected?.slots.length === 0 && (
+              <p className="text-sm text-muted-foreground">No classes scheduled.</p>
+            )}
+            {selected?.slots.map((slot) => {
+              const subjectName = slot.subjectId ? subjectsById.get(slot.subjectId)?.name : slot.type
+              const record = selected.records.find(
+                (r) => r.subjectId === slot.subjectId && r.period === slot.period,
+              )
+              return (
+                <div key={slot.id} className="flex items-center justify-between rounded-md border p-2">
+                  <span className="text-sm">
+                    P{slot.period} · {subjectName ?? slot.type}
+                  </span>
+                  {slot.subjectId !== null && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant={record?.status === 'present' ? 'default' : 'outline'}
+                        onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'present')}
+                      >
+                        Present
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={record?.status === 'absent' ? 'destructive' : 'outline'}
+                        onClick={() => toggleAttendance(slot.subjectId as number, slot.id, 'absent')}
+                      >
+                        Absent
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 export function CalendarPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Calendar</h1>
-      <p className="text-muted-foreground">
-        Monthly calendar with per-day classes, attendance, leave, and holiday status will appear here.
-      </p>
+      <Tabs defaultValue="calendar">
+        <TabsList>
+          <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="holidays">Holidays</TabsTrigger>
+          <TabsTrigger value="yellow-forms">Yellow Forms</TabsTrigger>
+        </TabsList>
+        <TabsContent value="calendar" className="pt-4">
+          <Card>
+            <CardContent className="pt-6">
+              <CalendarGrid />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="holidays" className="pt-4">
+          <HolidaysTab />
+        </TabsContent>
+        <TabsContent value="yellow-forms" className="pt-4">
+          <YellowFormsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
