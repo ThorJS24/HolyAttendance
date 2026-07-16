@@ -57,6 +57,24 @@
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
   --ring: oklch(0.55 0.2 265);
+
+  /* Chart palette (validated categorical order + sequential ramp; see the
+     dataviz skill's references/palette.md — these are the reference hexes,
+     not eyeballed). */
+  --chart-1: #2a78d6;
+  --chart-2: #008300;
+  --chart-3: #e87ba4;
+  --chart-4: #eda100;
+  --chart-5: #1baf7a;
+  --chart-6: #eb6834;
+  --chart-7: #4a3aa7;
+  --chart-8: #e34948;
+  --chart-seq-1: #cde2fb;
+  --chart-seq-2: #6da7ec;
+  --chart-seq-3: #2a78d6;
+  --chart-seq-4: #184f95;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #898781;
 }
 
 .dark {
@@ -83,6 +101,21 @@
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 18%);
   --ring: oklch(0.7 0.18 265);
+
+  --chart-1: #3987e5;
+  --chart-2: #008300;
+  --chart-3: #d55181;
+  --chart-4: #c98500;
+  --chart-5: #199e70;
+  --chart-6: #d95926;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-seq-1: #184f95;
+  --chart-seq-2: #256abf;
+  --chart-seq-3: #5598e7;
+  --chart-seq-4: #9ec5f4;
+  --chart-grid: #2c2c2a;
+  --chart-axis: #898781;
 }
 
 @layer base {

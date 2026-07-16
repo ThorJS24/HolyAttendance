@@ -59,6 +59,8 @@ export const IPC_CHANNELS = {
 
   periodTypeRulesList: 'periodTypeRules:list',
   periodTypeRulesSetBucket: 'periodTypeRules:setBucket',
+
+  filesSaveFile: 'files:saveFile',
 } as const
 
 export interface BunkMateApi {
@@ -117,5 +119,14 @@ export interface BunkMateApi {
   periodTypeRules: {
     list: () => Promise<PeriodTypeRule[]>
     setBucket: (type: PeriodTypeRule['type'], bucket: PeriodTypeRule['bucket']) => Promise<PeriodTypeRule>
+  }
+
+  files: {
+    /** Opens a native save dialog; returns the chosen path, or null if cancelled. */
+    saveFile: (opts: {
+      defaultName: string
+      content: ArrayBuffer | string
+      filters: { name: string; extensions: string[] }[]
+    }) => Promise<string | null>
   }
 }

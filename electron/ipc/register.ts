@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
+import fs from 'node:fs'
 import type { AppDatabase } from '../db/client'
 import { IPC_CHANNELS } from './contract'
 import {
@@ -80,5 +81,19 @@ export function registerIpcHandlers(db: AppDatabase): void {
   ipcMain.handle(IPC_CHANNELS.periodTypeRulesList, () => periodTypeRulesRepo.listPeriodTypeRules(db))
   ipcMain.handle(IPC_CHANNELS.periodTypeRulesSetBucket, (_e, type, bucket) =>
     periodTypeRulesRepo.setPeriodTypeRuleBucket(db, type, bucket),
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.filesSaveFile,
+    async (
+      _e,
+      opts: { defaultName: string; content: ArrayBuffer | string; filters: { name: string; extensions: string[] }[] },
+    ) => {
+      const result = await dialog.showSaveDialog({ defaultPath: opts.defaultName, filters: opts.filters })
+      if (result.canceled || !result.filePath) return null
+      const data = typeof opts.content === 'string' ? opts.content : Buffer.from(opts.content)
+      fs.writeFileSync(result.filePath, data)
+      return result.filePath
+    },
   )
 }

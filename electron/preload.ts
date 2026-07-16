@@ -61,6 +61,10 @@ const api: BunkMateApi = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.periodTypeRulesList),
     setBucket: (type, bucket) => ipcRenderer.invoke(IPC_CHANNELS.periodTypeRulesSetBucket, type, bucket),
   },
+
+  files: {
+    saveFile: (opts) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveFile, opts),
+  },
 }
 
 contextBridge.exposeInMainWorld('bunkmate', api)
