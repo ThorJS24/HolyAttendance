@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import path from 'node:path'
 import { schema } from '../../../src/db/schema'
 import type { AppDatabase } from '../client'
+import * as semestersRepo from './semesters'
 import * as subjectsRepo from './subjects'
 import * as timetableSlotsRepo from './timetable-slots'
 import * as attendanceRecordsRepo from './attendance-records'
@@ -332,6 +333,140 @@ describe('yellow forms repository', () => {
 
     yellowFormsRepo.deleteYellowForm(db, form.id)
     expect(yellowFormsRepo.listYellowForms(db)).toHaveLength(0)
+  })
+})
+
+describe('semesters repository', () => {
+  let db: AppDatabase
+  beforeEach(() => {
+    db = createTestDb()
+  })
+
+  it('creates, lists, updates, and archives a semester', () => {
+    const created = semestersRepo.createSemester(db, {
+      number: 1,
+      label: '2026-1',
+      startDate: '2026-01-01',
+      endDate: '2026-05-01',
+      periodsPerDay: 7,
+      lunchPeriod: 4,
+      isActive: false,
+    })
+    expect(created.archived).toBe(false)
+    expect(semestersRepo.listSemesters(db)).toHaveLength(1)
+
+    const updated = semestersRepo.updateSemester(db, created.id, { periodsPerDay: 8 })
+    expect(updated.periodsPerDay).toBe(8)
+
+    const archived = semestersRepo.setSemesterArchived(db, created.id, true)
+    expect(archived.archived).toBe(true)
+  })
+
+  it('setting a semester active deactivates the others and syncs settings.currentSemester', () => {
+    const first = semestersRepo.createSemester(db, {
+      number: 1,
+      label: '2026-1',
+      startDate: '2026-01-01',
+      endDate: '2026-05-01',
+      periodsPerDay: 7,
+      lunchPeriod: 4,
+      isActive: true,
+    })
+    const second = semestersRepo.createSemester(db, {
+      number: 2,
+      label: '2026-2',
+      startDate: '2026-06-01',
+      endDate: '2026-12-01',
+      periodsPerDay: 7,
+      lunchPeriod: 4,
+      isActive: true,
+    })
+
+    expect(semestersRepo.getSemester(db, first.id)?.isActive).toBe(false)
+    expect(semestersRepo.getSemester(db, second.id)?.isActive).toBe(true)
+    expect(settingsRepo.getSettings(db).currentSemester).toBe('2026-2')
+
+    semestersRepo.updateSemester(db, first.id, { isActive: true })
+    expect(semestersRepo.getSemester(db, first.id)?.isActive).toBe(true)
+    expect(semestersRepo.getSemester(db, second.id)?.isActive).toBe(false)
+    expect(settingsRepo.getSettings(db).currentSemester).toBe('2026-1')
+  })
+
+  it('archiving the active semester clears its active flag', () => {
+    const semester = semestersRepo.createSemester(db, {
+      number: 1,
+      label: '2026-1',
+      startDate: '2026-01-01',
+      endDate: '2026-05-01',
+      periodsPerDay: 7,
+      lunchPeriod: 4,
+      isActive: true,
+    })
+    const archived = semestersRepo.setSemesterArchived(db, semester.id, true)
+    expect(archived.archived).toBe(true)
+    expect(archived.isActive).toBe(false)
+  })
+
+  it('blocks deletion while subjects or timetable slots still reference the semester, and allows it once cleared', () => {
+    const semester = semestersRepo.createSemester(db, {
+      number: 1,
+      label: '2026-1',
+      startDate: '2026-01-01',
+      endDate: '2026-05-01',
+      periodsPerDay: 7,
+      lunchPeriod: 4,
+      isActive: false,
+    })
+    const subject = subjectsRepo.createSubject(db, {
+      name: 'Data Structures',
+      semester: '2026-1',
+      credits: 4,
+      faculty: null,
+      category: null,
+    })
+    timetableSlotsRepo.createTimetableSlot(db, {
+      semester: '2026-1',
+      day: 'mon',
+      period: 1,
+      subjectId: subject.id,
+      type: 'class',
+      startTime: null,
+      endTime: null,
+    })
+
+    expect(semestersRepo.getSemesterDependents(db, '2026-1')).toEqual({ subjects: 1, timetableSlots: 1 })
+    expect(() => semestersRepo.deleteSemester(db, semester.id)).toThrow(/subject.*timetable slot/)
+    expect(semestersRepo.listSemesters(db)).toHaveLength(1)
+
+    subjectsRepo.deleteSubject(db, subject.id)
+    semestersRepo.deleteSemester(db, semester.id)
+    expect(semestersRepo.listSemesters(db)).toHaveLength(0)
+  })
+
+  it('seeds semesters from pre-existing free-text semester values exactly once', () => {
+    subjectsRepo.createSubject(db, {
+      name: 'Data Structures',
+      semester: '2025-2',
+      credits: 4,
+      faculty: null,
+      category: null,
+    })
+    settingsRepo.updateSettings(db, { currentSemester: '2026-1' })
+
+    semestersRepo.ensureSemestersSeeded(db)
+    const seeded = semestersRepo.listSemesters(db)
+    expect(seeded.map((s) => s.label).sort()).toEqual(['2025-2', '2026-1'])
+    expect(seeded.find((s) => s.label === '2026-1')?.isActive).toBe(true)
+    expect(seeded.find((s) => s.label === '2025-2')?.isActive).toBe(false)
+
+    // Re-running is a no-op since semesters already exist.
+    semestersRepo.ensureSemestersSeeded(db)
+    expect(semestersRepo.listSemesters(db)).toHaveLength(2)
+  })
+
+  it('does not seed anything on a fresh install with no existing semester data', () => {
+    semestersRepo.ensureSemestersSeeded(db)
+    expect(semestersRepo.listSemesters(db)).toHaveLength(0)
   })
 })
 

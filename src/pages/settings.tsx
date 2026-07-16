@@ -21,14 +21,12 @@ export function SettingsPage() {
   const {
     overallMinTarget,
     subjectMinTarget,
-    currentSemester,
     theme,
     backupIntervalDays,
     backupDir,
     lastBackupAt,
     setOverallMinTarget,
     setSubjectMinTarget,
-    setCurrentSemester,
     setTheme,
     setBackupIntervalDays,
     setBackupDir,
@@ -38,7 +36,6 @@ export function SettingsPage() {
 
   const [overallMinTargetInput, setOverallMinTargetInput] = useState(String(overallMinTarget))
   const [subjectMinTargetInput, setSubjectMinTargetInput] = useState(String(subjectMinTarget))
-  const [semesterInput, setSemesterInput] = useState(currentSemester)
   const [intervalInput, setIntervalInput] = useState(String(backupIntervalDays))
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
@@ -121,18 +118,21 @@ export function SettingsPage() {
               }}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="semester">Current semester</Label>
-            <Input
-              id="semester"
-              className="w-40"
-              value={semesterInput}
-              onChange={(e) => setSemesterInput(e.target.value)}
-              onBlur={() => setCurrentSemester(semesterInput)}
-              placeholder="2026-1"
-            />
-          </div>
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Semesters</CardTitle>
+          <CardDescription>
+            Add, edit, and switch between semesters — including period count and lunch position — from the{' '}
+            <Link to="/semesters" className="underline">
+              Semesters
+            </Link>{' '}
+            page. The semester shown across Timetable, Subjects, Dashboard, and Analytics is picked from the
+            switcher on those pages.
+          </CardDescription>
+        </CardHeader>
       </Card>
 
       <Card>

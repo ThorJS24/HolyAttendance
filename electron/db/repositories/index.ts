@@ -1,3 +1,4 @@
+export * as semestersRepo from './semesters'
 export * as subjectsRepo from './subjects'
 export * as periodTypeRulesRepo from './period-type-rules'
 export * as timetableSlotsRepo from './timetable-slots'

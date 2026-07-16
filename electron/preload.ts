@@ -7,6 +7,15 @@ const api: BunkMateApi = {
     electron: process.versions.electron,
   },
 
+  semesters: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.semestersList),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.semestersCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.semestersUpdate, id, input),
+    setArchived: (id, archived) => ipcRenderer.invoke(IPC_CHANNELS.semestersSetArchived, id, archived),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.semestersDelete, id),
+    getDependents: (label) => ipcRenderer.invoke(IPC_CHANNELS.semestersGetDependents, label),
+  },
+
   subjects: {
     list: (opts) => ipcRenderer.invoke(IPC_CHANNELS.subjectsList, opts),
     get: (id) => ipcRenderer.invoke(IPC_CHANNELS.subjectsGet, id),

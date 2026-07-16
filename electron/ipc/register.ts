@@ -4,6 +4,7 @@ import type { AppDatabase } from '../db/client'
 import { IPC_CHANNELS } from './contract'
 import { backupNow, restoreFrom, defaultBackupFileName } from '../backup'
 import {
+  semestersRepo,
   subjectsRepo,
   timetableSlotsRepo,
   attendanceRecordsRepo,
@@ -15,6 +16,19 @@ import {
 } from '../db/repositories'
 
 export function registerIpcHandlers(db: AppDatabase): void {
+  ipcMain.handle(IPC_CHANNELS.semestersList, () => semestersRepo.listSemesters(db))
+  ipcMain.handle(IPC_CHANNELS.semestersCreate, (_e, input) => semestersRepo.createSemester(db, input))
+  ipcMain.handle(IPC_CHANNELS.semestersUpdate, (_e, id: number, input) =>
+    semestersRepo.updateSemester(db, id, input),
+  )
+  ipcMain.handle(IPC_CHANNELS.semestersSetArchived, (_e, id: number, archived: boolean) =>
+    semestersRepo.setSemesterArchived(db, id, archived),
+  )
+  ipcMain.handle(IPC_CHANNELS.semestersDelete, (_e, id: number) => semestersRepo.deleteSemester(db, id))
+  ipcMain.handle(IPC_CHANNELS.semestersGetDependents, (_e, label: string) =>
+    semestersRepo.getSemesterDependents(db, label),
+  )
+
   ipcMain.handle(IPC_CHANNELS.subjectsList, (_e, opts) => subjectsRepo.listSubjects(db, opts))
   ipcMain.handle(IPC_CHANNELS.subjectsGet, (_e, id: number) => subjectsRepo.getSubject(db, id))
   ipcMain.handle(IPC_CHANNELS.subjectsCreate, (_e, input) => subjectsRepo.createSubject(db, input))

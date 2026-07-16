@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SemesterSwitcher } from '@/components/semester-switcher'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -49,20 +50,14 @@ interface CellFormState {
 }
 
 export function TimetablePage() {
-  const currentSemester = useSettingsStore((s) => s.currentSemester)
-  const settingsLoaded = useSettingsStore((s) => s.loaded)
+  const semester = useSettingsStore((s) => s.currentSemester)
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const { slots, load, create, update, remove } = useTimetableStore()
   const pushToast = useToastStore((s) => s.push)
 
-  const [semester, setSemester] = useState('')
   const [dialogTarget, setDialogTarget] = useState<{ day: Weekday; period: number } | null>(null)
   const [form, setForm] = useState<CellFormState>({ subjectId: 'none', type: 'class', startTime: '', endTime: '' })
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (settingsLoaded && !semester) setSemester(currentSemester || 'default')
-  }, [settingsLoaded, currentSemester, semester])
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -134,14 +129,26 @@ export function TimetablePage() {
     setDialogTarget(null)
   }
 
+  if (!semester) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">Timetable</h1>
+        <p className="text-sm text-muted-foreground">
+          No semester is set up yet. Create one on the{' '}
+          <a href="#/semesters" className="underline">
+            Semesters
+          </a>{' '}
+          page to start building a timetable.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Timetable</h1>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="semester">Semester</Label>
-          <Input id="semester" className="w-32" value={semester} onChange={(e) => setSemester(e.target.value)} />
-        </div>
+        <SemesterSwitcher />
       </div>
 
       <div className="overflow-x-auto rounded-lg border">

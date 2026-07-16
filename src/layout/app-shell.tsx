@@ -8,6 +8,7 @@ import {
   BarChart3,
   Wand2,
   Settings,
+  GraduationCap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlobalSearch } from '@/components/global-search'
@@ -22,6 +23,7 @@ const navItems = [
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/planner', label: 'Planner', icon: Wand2 },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/semesters', label: 'Semesters', icon: GraduationCap },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

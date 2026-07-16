@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog } from 'electron'
 import path from 'node:path'
 import { initDb, closeDb, getDbPath } from './db/client'
 import { registerIpcHandlers } from './ipc/register'
-import { settingsRepo, periodTypeRulesRepo } from './db/repositories'
+import { settingsRepo, periodTypeRulesRepo, semestersRepo } from './db/repositories'
 import { runScheduledBackupIfDue } from './backup'
 
 // Populated by vite-plugin-electron during `npm run dev`.
@@ -57,6 +57,7 @@ app.whenReady().then(() => {
 
   settingsRepo.ensureSettingsRow(db)
   periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
+  semestersRepo.ensureSemestersSeeded(db)
   registerIpcHandlers(db)
   runScheduledBackupIfDue(db)
   createWindow()

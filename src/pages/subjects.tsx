@@ -19,6 +19,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Card, CardContent } from '@/components/ui/card'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
 import { useHotkey } from '@/hooks/use-hotkey'
 import type { Subject, NewSubject } from '../../electron/db/repositories/subjects'
@@ -43,6 +44,7 @@ export function SubjectsPage() {
   const { subjects, loading, load, create, update, setArchived, remove } = useSubjectsStore()
   const currentSemester = useSettingsStore((s) => s.currentSemester)
   const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
+  const { semesters: allSemesters, load: loadSemesters } = useSemestersStore()
   const pushToast = useToastStore((s) => s.push)
 
   const [showArchived, setShowArchived] = useState(false)
@@ -55,12 +57,13 @@ export function SubjectsPage() {
 
   useEffect(() => {
     load({ includeArchived: true })
-  }, [load])
+    loadSemesters()
+  }, [load, loadSemesters])
 
-  const semesters = useMemo(() => {
-    const set = new Set(subjects.map((s) => s.semester))
-    return Array.from(set).sort()
-  }, [subjects])
+  const semesters = useMemo(
+    () => [...allSemesters].filter((s) => !s.archived).sort((a, b) => a.number - b.number),
+    [allSemesters],
+  )
 
   const visibleSubjects = useMemo(() => {
     return subjects.filter((s) => {
@@ -154,8 +157,8 @@ export function SubjectsPage() {
             <SelectContent>
               <SelectItem value="all">All semesters</SelectItem>
               {semesters.map((sem) => (
-                <SelectItem key={sem} value={sem}>
-                  {sem}
+                <SelectItem key={sem.id} value={sem.label}>
+                  {sem.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -264,13 +267,23 @@ export function SubjectsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="semester">Semester</Label>
-                <Input
-                  id="semester"
-                  value={form.semester}
-                  onChange={(e) => setForm({ ...form, semester: e.target.value })}
-                  placeholder="2026-1"
-                  required
-                />
+                <Select value={form.semester} onValueChange={(v) => setForm({ ...form, semester: v })}>
+                  <SelectTrigger id="semester">
+                    <SelectValue placeholder="Select semester" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {semesters.map((sem) => (
+                      <SelectItem key={sem.id} value={sem.label}>
+                        {sem.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {semesters.length === 0 && (
+                  <p className="text-xs text-destructive">
+                    No semesters exist yet — create one on the Semesters page first.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="credits">Credits</Label>

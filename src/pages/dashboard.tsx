@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarDays, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { SemesterSwitcher } from '@/components/semester-switcher'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useHolidaysStore } from '@/store/holidays-store'
@@ -83,7 +84,10 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <SemesterSwitcher />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>

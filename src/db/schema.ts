@@ -25,6 +25,33 @@ export type LeavePlanStatus = (typeof LEAVE_PLAN_STATUSES)[number]
 export const YELLOW_FORM_STATUSES = ['pending', 'approved', 'rejected'] as const
 export type YellowFormStatus = (typeof YELLOW_FORM_STATUSES)[number]
 
+// A semester's `label` (e.g. "2026-1") is the key subjects/timetableSlots
+// scope against — kept as a plain text match rather than a SQL foreign key
+// so existing free-text semester values on those tables keep working
+// unchanged; deletion is guarded in the repository layer instead (see
+// deleteSemester in electron/db/repositories/semesters.ts).
+export const semesters = sqliteTable('semesters', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  number: integer('number').notNull(),
+  label: text('label').notNull().unique(),
+  startDate: text('start_date').notNull(),
+  endDate: text('end_date').notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  // Total grid rows shown on the Timetable page for this semester (teaching
+  // periods + lunch), and which period number defaults to type 'lunch' when
+  // a new slot is opened there. See src/lib/timetable-rules.ts for the
+  // teaching-period cap these interact with.
+  periodsPerDay: integer('periods_per_day').notNull().default(7),
+  lunchPeriod: integer('lunch_period').notNull().default(4),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+})
+
 export const subjects = sqliteTable('subjects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
@@ -161,6 +188,7 @@ export const settings = sqliteTable('settings', {
 export const SETTINGS_SINGLETON_ID = 1
 
 export const schema = {
+  semesters,
   subjects,
   periodTypeRules,
   timetableSlots,

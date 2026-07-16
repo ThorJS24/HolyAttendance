@@ -2,6 +2,7 @@
 // Electron main process. Both `preload.ts` (invoke wrappers) and
 // `register.ts` (ipcMain handlers) are keyed off `IPC_CHANNELS`, so adding an
 // operation means adding one entry here plus one handler + one preload call.
+import type { Semester, NewSemester, SemesterUpdate, SemesterDependents } from '../db/repositories/semesters'
 import type { Subject, NewSubject, SubjectUpdate } from '../db/repositories/subjects'
 import type {
   TimetableSlot,
@@ -21,6 +22,13 @@ import type { Settings, SettingsUpdate } from '../db/repositories/settings'
 import type { PeriodTypeRule } from '../db/repositories/period-type-rules'
 
 export const IPC_CHANNELS = {
+  semestersList: 'semesters:list',
+  semestersCreate: 'semesters:create',
+  semestersUpdate: 'semesters:update',
+  semestersSetArchived: 'semesters:setArchived',
+  semestersDelete: 'semesters:delete',
+  semestersGetDependents: 'semesters:getDependents',
+
   subjectsList: 'subjects:list',
   subjectsGet: 'subjects:get',
   subjectsCreate: 'subjects:create',
@@ -69,6 +77,16 @@ export const IPC_CHANNELS = {
 
 export interface BunkMateApi {
   versions: { node: string; electron: string }
+
+  semesters: {
+    list: () => Promise<Semester[]>
+    create: (input: NewSemester) => Promise<Semester>
+    update: (id: number, input: SemesterUpdate) => Promise<Semester>
+    setArchived: (id: number, archived: boolean) => Promise<Semester>
+    /** Throws (rejects) with a human-readable message if dependents exist. */
+    delete: (id: number) => Promise<void>
+    getDependents: (label: string) => Promise<SemesterDependents>
+  }
 
   subjects: {
     list: (opts?: { semester?: string; includeArchived?: boolean }) => Promise<Subject[]>

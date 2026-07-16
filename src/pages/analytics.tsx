@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { TimetableSlot } from '../../electron/db/repositories/timetable-slots'
 import { Download } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -16,8 +17,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SemesterSwitcher } from '@/components/semester-switcher'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useSemestersStore } from '@/store/semesters-store'
 import { useAttendanceStore } from '@/store/attendance-store'
 import { useLeavePlansStore } from '@/store/leave-plans-store'
 import { useTimetableStore } from '@/store/timetable-store'
@@ -25,6 +28,7 @@ import { useHolidaysStore } from '@/store/holidays-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { usePeriodTypeRulesStore } from '@/store/period-type-rules-store'
 import { useAttendance } from '@/hooks/use-attendance'
+import { computeAttendance, aggregateOverall } from '@/lib/attendance-engine'
 import { computeAttendanceTrend, computeDailyAttendance, type TrendGranularity } from '@/lib/attendance-trend'
 import { categoricalColor, sequentialColor } from '@/lib/chart-colors'
 import { buildSubjectRows, exportReport, type ReportFormat } from '@/lib/report-export'
@@ -56,6 +60,7 @@ export function AnalyticsPage() {
   const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
   const semester = currentSemester || null
 
+  const { semesters: allSemesters, load: loadSemesters } = useSemestersStore()
   const records = useAttendanceStore((s) => s.records)
   const slots = useTimetableStore((s) => s.slots)
   const holidays = useHolidaysStore((s) => s.holidays)
@@ -67,11 +72,40 @@ export function AnalyticsPage() {
 
   const [granularity, setGranularity] = useState<TrendGranularity>('week')
   const [exporting, setExporting] = useState(false)
+  const [slotsBySemester, setSlotsBySemester] = useState<Record<string, TimetableSlot[]>>({})
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
     loadPlans()
-  }, [loadSubjects, loadPlans])
+    loadSemesters()
+  }, [loadSubjects, loadPlans, loadSemesters])
+
+  const comparableSemesters = useMemo(
+    () => allSemesters.filter((s) => !s.archived).sort((a, b) => a.number - b.number),
+    [allSemesters],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all(
+      comparableSemesters.map(async (s) => [s.label, await window.bunkmate.timetableSlots.list({ semester: s.label })] as const),
+    ).then((entries) => {
+      if (!cancelled) setSlotsBySemester(Object.fromEntries(entries))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [comparableSemesters])
+
+  const semesterComparison = useMemo(
+    () =>
+      comparableSemesters.map((s) => {
+        const semesterSlots = slotsBySemester[s.label] ?? []
+        const stats = aggregateOverall(computeAttendance({ records, slots: semesterSlots, holidays, yellowForms, rules }))
+        return { label: s.label, percentage: stats.percentage ?? 0, isCurrent: s.label === currentSemester }
+      }),
+    [comparableSemesters, slotsBySemester, records, holidays, yellowForms, rules, currentSemester],
+  )
 
   const subjectRows = useMemo(
     () => buildSubjectRows(subjects, bySubject, subjectMinTarget),
@@ -149,18 +183,49 @@ export function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Analytics</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" disabled={exporting} onClick={() => handleExport('csv')}>
-            <Download /> CSV
-          </Button>
-          <Button variant="outline" disabled={exporting} onClick={() => handleExport('excel')}>
-            <Download /> Excel
-          </Button>
-          <Button variant="outline" disabled={exporting} onClick={() => handleExport('pdf')}>
-            <Download /> PDF
-          </Button>
+        <div className="flex items-center gap-4">
+          <SemesterSwitcher />
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={exporting} onClick={() => handleExport('csv')}>
+              <Download /> CSV
+            </Button>
+            <Button variant="outline" disabled={exporting} onClick={() => handleExport('excel')}>
+              <Download /> Excel
+            </Button>
+            <Button variant="outline" disabled={exporting} onClick={() => handleExport('pdf')}>
+              <Download /> PDF
+            </Button>
+          </div>
         </div>
       </div>
+
+      {semesterComparison.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Semester comparison</CardTitle>
+            <CardDescription>Overall attendance % per semester, current semester highlighted.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={semesterComparison} margin={{ left: 0, right: 16, top: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+                <XAxis dataKey="label" stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
+                <YAxis domain={[0, 100]} stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
+                <ReferenceLine y={overallMinTarget} stroke="var(--warning)" strokeDasharray="4 4" />
+                <Tooltip
+                  formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Overall']}
+                  contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8 }}
+                />
+                <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                  {semesterComparison.map((entry, i) => (
+                    <Cell key={i} fill={entry.isCurrent ? 'var(--chart-1)' : 'var(--chart-grid)'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
