@@ -10,6 +10,8 @@ import {
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { GlobalSearch } from '@/components/global-search'
+import { NotificationCenter } from '@/components/notification-center'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -50,9 +52,15 @@ export function AppShell() {
           ))}
         </nav>
       </aside>
-      <main className="flex-1 overflow-auto p-6">
-        <Outlet />
-      </main>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b px-6">
+          <GlobalSearch />
+          <NotificationCenter />
+        </header>
+        <main className="flex-1 overflow-auto p-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

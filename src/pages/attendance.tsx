@@ -44,6 +44,7 @@ export function AttendancePage() {
   const pushToast = useToastStore((s) => s.push)
 
   const [subjectFilter, setSubjectFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | AttendanceStatus>('all')
   const [dateFrom, setDateFrom] = useState(startOfMonth())
   const [dateTo, setDateTo] = useState(todayIso())
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -67,8 +68,11 @@ export function AttendancePage() {
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
 
   const sortedRecords = useMemo(
-    () => [...records].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.period - b.period)),
-    [records],
+    () =>
+      [...records]
+        .filter((r) => statusFilter === 'all' || r.status === statusFilter)
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.period - b.period)),
+    [records, statusFilter],
   )
 
   function openCreateDialog() {
@@ -175,6 +179,19 @@ export function AttendancePage() {
         <div className="space-y-2">
           <Label htmlFor="date-to">To</Label>
           <Input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="status-filter">Status</Label>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | AttendanceStatus)}>
+            <SelectTrigger id="status-filter" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="present">Present</SelectItem>
+              <SelectItem value="absent">Absent</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
