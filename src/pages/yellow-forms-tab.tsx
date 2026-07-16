@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, Check, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,10 +40,11 @@ const STATUS_VARIANT = {
 
 export function YellowFormsTab() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
-  const { forms, load, create, setStatus, remove } = useYellowFormsStore()
+  const { forms, load, create, update, setStatus, remove } = useYellowFormsStore()
   const pushToast = useToastStore((s) => s.push)
 
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<YellowForm | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm(''))
   const [deleteTarget, setDeleteTarget] = useState<YellowForm | null>(null)
   const [saving, setSaving] = useState(false)
@@ -58,7 +59,14 @@ export function YellowFormsTab() {
   const sorted = useMemo(() => [...forms].sort((a, b) => (a.date < b.date ? 1 : -1)), [forms])
 
   function openCreate() {
+    setEditing(null)
     setForm(emptyForm(subjects[0] ? String(subjects[0].id) : ''))
+    setDialogOpen(true)
+  }
+
+  function openEdit(f: YellowForm) {
+    setEditing(f)
+    setForm({ subjectId: String(f.subjectId), date: f.date, period: f.period ? String(f.period) : '', reason: f.reason ?? '' })
     setDialogOpen(true)
   }
 
@@ -67,13 +75,19 @@ export function YellowFormsTab() {
     if (!form.subjectId) return
     setSaving(true)
     try {
-      await create({
+      const payload = {
         subjectId: Number(form.subjectId),
         date: form.date,
         period: form.period ? Number(form.period) : null,
         reason: form.reason.trim() || null,
-      })
-      pushToast({ title: 'Yellow form submitted' })
+      }
+      if (editing) {
+        await update(editing.id, payload)
+        pushToast({ title: 'Yellow form updated' })
+      } else {
+        await create(payload)
+        pushToast({ title: 'Yellow form submitted' })
+      }
       setDialogOpen(false)
     } finally {
       setSaving(false)
@@ -150,6 +164,9 @@ export function YellowFormsTab() {
                           </Button>
                         </>
                       )}
+                      <Button size="icon" variant="ghost" onClick={() => openEdit(f)} aria-label="Edit">
+                        <Pencil />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(f)} aria-label="Delete">
                         <Trash2 />
                       </Button>
@@ -166,8 +183,12 @@ export function YellowFormsTab() {
         <DialogContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>New yellow form</DialogTitle>
-              <DialogDescription>Submitted as pending; approve or reject it from the list.</DialogDescription>
+              <DialogTitle>{editing ? 'Edit yellow form' : 'New yellow form'}</DialogTitle>
+              <DialogDescription>
+                {editing
+                  ? 'Update the details below.'
+                  : 'Submitted as pending; approve or reject it from the list.'}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               <Label htmlFor="yf-subject">Subject</Label>
@@ -220,7 +241,7 @@ export function YellowFormsTab() {
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>
-                Submit
+                {editing ? 'Save changes' : 'Submit'}
               </Button>
             </DialogFooter>
           </form>
