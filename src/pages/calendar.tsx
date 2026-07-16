@@ -1,16 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileWarning } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useAttendanceStore } from '@/store/attendance-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useLeavePlansStore } from '@/store/leave-plans-store'
+import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
 import { jsDayToWeekday } from '@/lib/attendance-engine'
 import { todayIso } from '@/lib/date-utils'
@@ -72,14 +83,22 @@ function CalendarGrid() {
   const { records, load: loadRecords, create: createRecord, update: updateRecord } = useAttendanceStore()
   const { holidays, load: loadHolidays, create: createHoliday, remove: removeHoliday } = useHolidaysStore()
   const { plans, load: loadPlans } = useLeavePlansStore()
+  const { forms: yellowForms, load: loadYellowForms, create: createYellowForm } = useYellowFormsStore()
   const pushToast = useToastStore((s) => s.push)
+
+  const [yellowFormDialogOpen, setYellowFormDialogOpen] = useState(false)
+  const [yellowFormScope, setYellowFormScope] = useState<'day' | 'period'>('day')
+  const [yellowFormPeriod, setYellowFormPeriod] = useState('')
+  const [yellowFormReason, setYellowFormReason] = useState('')
+  const [filingYellowForm, setFilingYellowForm] = useState(false)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
     loadRecords()
     loadHolidays()
     loadPlans()
-  }, [loadSubjects, loadRecords, loadHolidays, loadPlans])
+    loadYellowForms()
+  }, [loadSubjects, loadRecords, loadHolidays, loadPlans, loadYellowForms])
 
   useEffect(() => {
     if (currentSemester) loadSlots(currentSemester)
@@ -141,6 +160,57 @@ function CalendarGrid() {
       })
     }
     pushToast({ title: `Marked ${status}` })
+  }
+
+  const eligibleYellowFormSlots = (selected?.slots ?? []).filter((s) => s.type !== 'lunch' && s.subjectId !== null)
+
+  function yellowFormFor(subjectId: number, period: number) {
+    if (!selectedDate) return undefined
+    return yellowForms.find((f) => f.date === selectedDate && f.subjectId === subjectId && f.period === period)
+  }
+
+  function openYellowFormDialog() {
+    setYellowFormScope('day')
+    setYellowFormPeriod(eligibleYellowFormSlots[0] ? String(eligibleYellowFormSlots[0].period) : '')
+    setYellowFormReason('')
+    setYellowFormDialogOpen(true)
+  }
+
+  async function handleFileYellowForm() {
+    if (!selectedDate) return
+    const targets =
+      yellowFormScope === 'day'
+        ? eligibleYellowFormSlots.filter((s) => !yellowFormFor(s.subjectId as number, s.period))
+        : (() => {
+            const period = Number(yellowFormPeriod)
+            const slot = eligibleYellowFormSlots.find((s) => s.period === period)
+            if (!slot || yellowFormFor(slot.subjectId as number, slot.period)) return []
+            return [slot]
+          })()
+
+    if (targets.length === 0) {
+      pushToast({
+        title: 'Nothing to file',
+        description: 'Every eligible period for this selection already has a yellow form.',
+      })
+      return
+    }
+
+    setFilingYellowForm(true)
+    try {
+      for (const slot of targets) {
+        await createYellowForm({
+          date: selectedDate,
+          subjectId: slot.subjectId as number,
+          period: slot.period,
+          reason: yellowFormReason.trim() || null,
+        })
+      }
+      pushToast({ title: `Filed ${targets.length} yellow form${targets.length === 1 ? '' : 's'}` })
+      setYellowFormDialogOpen(false)
+    } finally {
+      setFilingYellowForm(false)
+    }
   }
 
   async function toggleHoliday() {
@@ -246,9 +316,21 @@ function CalendarGrid() {
             </DialogDescription>
           </DialogHeader>
 
-          <Button type="button" variant="outline" size="sm" onClick={toggleHoliday} className="w-fit">
-            {selected?.holiday ? 'Remove holiday' : 'Mark as holiday'}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={toggleHoliday} className="w-fit">
+              {selected?.holiday ? 'Remove holiday' : 'Mark as holiday'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={openYellowFormDialog}
+              disabled={eligibleYellowFormSlots.length === 0}
+              className="w-fit"
+            >
+              <FileWarning /> File yellow form
+            </Button>
+          </div>
 
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">Scheduled periods</h3>
@@ -261,11 +343,26 @@ function CalendarGrid() {
                 (r) => r.subjectId === slot.subjectId && r.period === slot.period,
               )
               const isLunch = slot.type === 'lunch'
+              const yellowForm = slot.subjectId !== null ? yellowFormFor(slot.subjectId, slot.period) : undefined
               return (
                 <div key={slot.id} className="rounded-md border p-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">
+                    <span className="flex items-center gap-2 text-sm">
                       P{slot.period} · {subjectName ?? slot.type}
+                      {yellowForm && (
+                        <Badge
+                          variant={
+                            yellowForm.status === 'approved'
+                              ? 'success'
+                              : yellowForm.status === 'rejected'
+                                ? 'destructive'
+                                : 'warning'
+                          }
+                          className="text-[10px]"
+                        >
+                          Yellow form: {yellowForm.status}
+                        </Badge>
+                      )}
                     </span>
                     {!isLunch && slot.subjectId !== null && (
                       <div className="flex gap-1">
@@ -300,6 +397,72 @@ function CalendarGrid() {
               )
             })}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={yellowFormDialogOpen} onOpenChange={setYellowFormDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>File yellow form</DialogTitle>
+            <DialogDescription>
+              {selected?.iso} — periods that already have a yellow form are skipped automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="yf-scope">Scope</Label>
+            <Select value={yellowFormScope} onValueChange={(v) => setYellowFormScope(v as 'day' | 'period')}>
+              <SelectTrigger id="yf-scope">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Whole day</SelectItem>
+                <SelectItem value="period">Specific period</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {yellowFormScope === 'period' && (
+            <div className="space-y-2">
+              <Label htmlFor="yf-period">Period</Label>
+              <Select value={yellowFormPeriod} onValueChange={setYellowFormPeriod}>
+                <SelectTrigger id="yf-period">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {eligibleYellowFormSlots.map((slot) => {
+                    const alreadyFiled = !!yellowFormFor(slot.subjectId as number, slot.period)
+                    const subjectName = subjectsById.get(slot.subjectId as number)?.name
+                    return (
+                      <SelectItem key={slot.id} value={String(slot.period)} disabled={alreadyFiled}>
+                        P{slot.period} · {subjectName}
+                        {alreadyFiled ? ' (already filed)' : ''}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="yf-reason">Reason (optional)</Label>
+            <Input
+              id="yf-reason"
+              value={yellowFormReason}
+              onChange={(e) => setYellowFormReason(e.target.value)}
+              placeholder="Medical, on-duty, etc."
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setYellowFormDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleFileYellowForm} disabled={filingYellowForm}>
+              File
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
