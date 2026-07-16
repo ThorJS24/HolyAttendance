@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -17,12 +17,12 @@ import { SemesterSwitcher } from '@/components/semester-switcher'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
 import { WEEKDAYS, PERIOD_TYPES, type Weekday, type PeriodType } from '@/db/schema'
 import type { TimetableSlot } from '../../electron/db/repositories/timetable-slots'
+import { validateTimetableDay } from '@/lib/timetable-rules'
 import { cn } from '@/lib/utils'
-
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8]
 
 const DAY_LABELS: Record<Weekday, string> = {
   mon: 'Mon',
@@ -53,19 +53,28 @@ export function TimetablePage() {
   const semester = useSettingsStore((s) => s.currentSemester)
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const { slots, load, create, update, remove } = useTimetableStore()
+  const { semesters, load: loadSemesters, update: updateSemester } = useSemestersStore()
   const pushToast = useToastStore((s) => s.push)
 
   const [dialogTarget, setDialogTarget] = useState<{ day: Weekday; period: number } | null>(null)
   const [form, setForm] = useState<CellFormState>({ subjectId: 'none', type: 'class', startTime: '', endTime: '' })
   const [saving, setSaving] = useState(false)
+  const [gridSettingsOpen, setGridSettingsOpen] = useState(false)
+  const [gridForm, setGridForm] = useState({ periodsPerDay: '7', lunchPeriod: '4' })
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
-  }, [loadSubjects])
+    loadSemesters()
+  }, [loadSubjects, loadSemesters])
 
   useEffect(() => {
     if (semester) load(semester)
   }, [load, semester])
+
+  const activeSemester = useMemo(() => semesters.find((s) => s.label === semester), [semesters, semester])
+  const periodsPerDay = activeSemester?.periodsPerDay ?? 7
+  const lunchPeriod = activeSemester?.lunchPeriod ?? 4
+  const PERIODS = useMemo(() => Array.from({ length: periodsPerDay }, (_, i) => i + 1), [periodsPerDay])
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
 
@@ -79,11 +88,27 @@ export function TimetablePage() {
     const existing = slotAt.get(`${day}:${period}`)
     setForm({
       subjectId: existing?.subjectId ? String(existing.subjectId) : 'none',
-      type: existing?.type ?? 'class',
+      type: existing?.type ?? (period === lunchPeriod ? 'lunch' : 'class'),
       startTime: existing?.startTime ?? '',
       endTime: existing?.endTime ?? '',
     })
     setDialogTarget({ day, period })
+  }
+
+  function openGridSettings() {
+    setGridForm({ periodsPerDay: String(periodsPerDay), lunchPeriod: String(lunchPeriod) })
+    setGridSettingsOpen(true)
+  }
+
+  async function handleGridSettingsSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!activeSemester) return
+    await updateSemester(activeSemester.id, {
+      periodsPerDay: Math.max(1, Number(gridForm.periodsPerDay) || 1),
+      lunchPeriod: Math.max(1, Number(gridForm.lunchPeriod) || 1),
+    })
+    pushToast({ title: 'Grid settings updated' })
+    setGridSettingsOpen(false)
   }
 
   const subjectRequired = form.type !== 'lunch'
@@ -95,6 +120,16 @@ export function TimetablePage() {
     if (subjectMissing) return
     const { day, period } = dialogTarget
     const existing = slotAt.get(`${day}:${period}`)
+
+    const daySlots = slots
+      .filter((s) => s.day === day && s.period !== period)
+      .map((s) => ({ period: s.period, type: s.type }))
+    daySlots.push({ period, type: form.type })
+    const validation = validateTimetableDay(daySlots)
+    if (!validation.ok) {
+      pushToast({ title: "Can't save this slot", description: validation.errors[0] })
+      return
+    }
 
     setSaving(true)
     try {
@@ -148,7 +183,12 @@ export function TimetablePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Timetable</h1>
-        <SemesterSwitcher />
+        <div className="flex items-center gap-3">
+          <SemesterSwitcher />
+          <Button variant="outline" size="sm" onClick={openGridSettings} disabled={!activeSemester}>
+            <Settings2 /> Grid settings
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
@@ -282,6 +322,48 @@ export function TimetablePage() {
                   Save
                 </Button>
               </div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={gridSettingsOpen} onOpenChange={setGridSettingsOpen}>
+        <DialogContent>
+          <form onSubmit={handleGridSettingsSubmit} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Grid settings</DialogTitle>
+              <DialogDescription>
+                Controls the Timetable grid size and lunch position for {semester}. Also editable from the{' '}
+                Semesters page.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="grid-periods">Periods per day</Label>
+                <Input
+                  id="grid-periods"
+                  type="number"
+                  min={1}
+                  value={gridForm.periodsPerDay}
+                  onChange={(e) => setGridForm({ ...gridForm, periodsPerDay: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="grid-lunch">Lunch period</Label>
+                <Input
+                  id="grid-lunch"
+                  type="number"
+                  min={1}
+                  value={gridForm.lunchPeriod}
+                  onChange={(e) => setGridForm({ ...gridForm, lunchPeriod: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setGridSettingsOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>
