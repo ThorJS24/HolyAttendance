@@ -176,6 +176,12 @@ export function TimetablePage() {
     setPendingPeriodTimes(null)
   }
 
+  // When Grid Settings has auto-allocated a time for this period, the
+  // per-slot start/end inputs below are redundant — the row already shows
+  // the real time for every day at once. Hide them in favor of a plain
+  // readout instead of asking for the same time twice.
+  const dialogAutoTime = dialogTarget ? periodTimeByPeriod.get(dialogTarget.period) : undefined
+
   const subjectRequired = form.type !== 'lunch'
   const subjectMissing = subjectRequired && form.subjectId === 'none'
 
@@ -204,8 +210,11 @@ export function TimetablePage() {
         period,
         subjectId: form.subjectId === 'none' ? null : Number(form.subjectId),
         type: form.type,
-        startTime: form.startTime || null,
-        endTime: form.endTime || null,
+        // The period-level auto-allocated time is the source of truth once
+        // it exists — don't also persist a per-slot value that could drift
+        // out of sync with it.
+        startTime: dialogAutoTime ? null : form.startTime || null,
+        endTime: dialogAutoTime ? null : form.endTime || null,
       }
       if (existing) {
         await update(existing.id, payload)
@@ -375,26 +384,33 @@ export function TimetablePage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="slot-start">Start time</Label>
-                <Input
-                  id="slot-start"
-                  type="time"
-                  value={form.startTime}
-                  onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-                />
+            {dialogAutoTime ? (
+              <p className="text-xs text-muted-foreground">
+                Time: {dialogAutoTime.startTime}–{dialogAutoTime.endTime} (auto-allocated — change it from Grid
+                settings, not here).
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="slot-start">Start time</Label>
+                  <Input
+                    id="slot-start"
+                    type="time"
+                    value={form.startTime}
+                    onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="slot-end">End time</Label>
+                  <Input
+                    id="slot-end"
+                    type="time"
+                    value={form.endTime}
+                    onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="slot-end">End time</Label>
-                <Input
-                  id="slot-end"
-                  type="time"
-                  value={form.endTime}
-                  onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-                />
-              </div>
-            </div>
+            )}
 
             <DialogFooter className="sm:justify-between">
               <Button type="button" variant="ghost" onClick={handleClear}>
