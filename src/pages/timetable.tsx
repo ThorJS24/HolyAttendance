@@ -19,9 +19,10 @@ import { useTimetableStore } from '@/store/timetable-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
-import { WEEKDAYS, PERIOD_TYPES, type Weekday, type PeriodType } from '@/db/schema'
+import { WEEKDAYS, PERIOD_TYPES, type Weekday, type PeriodType, type PeriodTime } from '@/db/schema'
 import type { TimetableSlot } from '../../electron/db/repositories/timetable-slots'
 import { validateTimetableDay } from '@/lib/timetable-rules'
+import { allocateEvenPeriodTimes } from '@/lib/period-time-allocation'
 import { cn } from '@/lib/utils'
 
 const DAY_LABELS: Record<Weekday, string> = {
@@ -60,7 +61,17 @@ export function TimetablePage() {
   const [form, setForm] = useState<CellFormState>({ subjectId: 'none', type: 'class', startTime: '', endTime: '' })
   const [saving, setSaving] = useState(false)
   const [gridSettingsOpen, setGridSettingsOpen] = useState(false)
-  const [gridForm, setGridForm] = useState({ periodsPerDay: '7', lunchPeriod: '4' })
+  const [gridForm, setGridForm] = useState({
+    periodsPerDay: '7',
+    lunchPeriod: '4',
+    dayStartTime: '',
+    dayEndTime: '',
+  })
+  // Only set once "Auto-allocate times" succeeds in the currently-open
+  // dialog session — kept separate from the semester's saved periodTimes so
+  // editing periodsPerDay/lunchPeriod without re-running allocation doesn't
+  // overwrite the existing (still valid until reassigned) stored times.
+  const [pendingPeriodTimes, setPendingPeriodTimes] = useState<PeriodTime[] | null>(null)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -75,6 +86,11 @@ export function TimetablePage() {
   const periodsPerDay = activeSemester?.periodsPerDay ?? 7
   const lunchPeriod = activeSemester?.lunchPeriod ?? 4
   const PERIODS = useMemo(() => Array.from({ length: periodsPerDay }, (_, i) => i + 1), [periodsPerDay])
+
+  const periodTimeByPeriod = useMemo(
+    () => new Map((activeSemester?.periodTimes ?? []).map((pt) => [pt.period, pt])),
+    [activeSemester],
+  )
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
 
@@ -96,8 +112,23 @@ export function TimetablePage() {
   }
 
   function openGridSettings() {
-    setGridForm({ periodsPerDay: String(periodsPerDay), lunchPeriod: String(lunchPeriod) })
+    setGridForm({ periodsPerDay: String(periodsPerDay), lunchPeriod: String(lunchPeriod), dayStartTime: '', dayEndTime: '' })
+    setPendingPeriodTimes(null)
     setGridSettingsOpen(true)
+  }
+
+  function handleAutoAllocate() {
+    try {
+      const times = allocateEvenPeriodTimes({
+        periodsPerDay: Math.max(1, Number(gridForm.periodsPerDay) || 1),
+        dayStartTime: gridForm.dayStartTime,
+        dayEndTime: gridForm.dayEndTime,
+      })
+      setPendingPeriodTimes(times)
+    } catch (err) {
+      setPendingPeriodTimes(null)
+      pushToast({ title: "Can't auto-allocate times", description: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   async function handleGridSettingsSubmit(e: React.FormEvent) {
@@ -106,9 +137,11 @@ export function TimetablePage() {
     await updateSemester(activeSemester.id, {
       periodsPerDay: Math.max(1, Number(gridForm.periodsPerDay) || 1),
       lunchPeriod: Math.max(1, Number(gridForm.lunchPeriod) || 1),
+      ...(pendingPeriodTimes ? { periodTimes: pendingPeriodTimes } : {}),
     })
     pushToast({ title: 'Grid settings updated' })
     setGridSettingsOpen(false)
+    setPendingPeriodTimes(null)
   }
 
   const subjectRequired = form.type !== 'lunch'
@@ -204,9 +237,13 @@ export function TimetablePage() {
             </tr>
           </thead>
           <tbody>
-            {PERIODS.map((period) => (
+            {PERIODS.map((period) => {
+              const time = periodTimeByPeriod.get(period)
+              return (
               <tr key={period} className="border-b last:border-0">
-                <td className="p-2 font-medium text-muted-foreground">{period}</td>
+                <td className="p-2 font-medium text-muted-foreground">
+                  {time ? `P${period} · ${time.startTime}–${time.endTime}` : `Period ${period}`}
+                </td>
                 {WEEKDAYS.map((day) => {
                   const slot = slotAt.get(`${day}:${period}`)
                   const subjectName = slot?.subjectId ? subjectsById.get(slot.subjectId)?.name : undefined
@@ -233,7 +270,8 @@ export function TimetablePage() {
                   )
                 })}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -359,11 +397,58 @@ export function TimetablePage() {
                 />
               </div>
             </div>
+
+            <div className="space-y-2 rounded-md border p-3">
+              <Label className="text-xs text-muted-foreground">
+                Auto-allocate times — evenly splits the day across all {gridForm.periodsPerDay || periodsPerDay}{' '}
+                periods (lunch included). Re-run this after changing periods/lunch/times above; it won't happen
+                automatically.
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="grid-day-start">Day start time</Label>
+                  <Input
+                    id="grid-day-start"
+                    type="time"
+                    value={gridForm.dayStartTime}
+                    onChange={(e) => setGridForm({ ...gridForm, dayStartTime: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="grid-day-end">Day end time</Label>
+                  <Input
+                    id="grid-day-end"
+                    type="time"
+                    value={gridForm.dayEndTime}
+                    onChange={(e) => setGridForm({ ...gridForm, dayEndTime: e.target.value })}
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!gridForm.dayStartTime || !gridForm.dayEndTime}
+                onClick={handleAutoAllocate}
+              >
+                Auto-allocate times
+              </Button>
+              {pendingPeriodTimes && (
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {pendingPeriodTimes.map((pt) => (
+                    <span key={pt.period}>
+                      P{pt.period} {pt.startTime}–{pt.endTime}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setGridSettingsOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Save</Button>
+              <Button type="submit">Save{pendingPeriodTimes ? ' & apply times' : ''}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
