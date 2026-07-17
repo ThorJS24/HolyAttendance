@@ -50,6 +50,23 @@ describe('validateTimetableDay', () => {
     expect(validateTimetableDay(classes(5), { maxTeachingPeriods: 4 }).ok).toBe(false)
     expect(validateTimetableDay(classes(4), { maxTeachingPeriods: 4 }).ok).toBe(true)
   })
+
+  it('allows an 8th teaching period for a semester configured with 8 periodsPerDay, where the old hardcoded 6-period cap would have wrongly rejected it at the 7th', () => {
+    // Regression test for timetable.tsx:128, which used to call
+    // validateTimetableDay(daySlots) with no options, ignoring the active
+    // semester's periodsPerDay and always enforcing the default cap of 6.
+    const periodsPerDay = 8
+    expect(validateTimetableDay(classes(7), { maxTeachingPeriods: periodsPerDay }).ok).toBe(true)
+    const res = validateTimetableDay(classes(8), { maxTeachingPeriods: periodsPerDay })
+    expect(res.ok).toBe(true)
+    expect(res.teachingCount).toBe(8)
+
+    // The old hardcoded default (no options) still rejects both, proving the
+    // fix is specifically about wiring periodsPerDay through, not a change
+    // to the default cap itself.
+    expect(validateTimetableDay(classes(7)).ok).toBe(false)
+    expect(validateTimetableDay(classes(8)).ok).toBe(false)
+  })
 })
 
 describe('canAddTeachingPeriod', () => {

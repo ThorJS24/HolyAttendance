@@ -125,7 +125,7 @@ export function TimetablePage() {
       .filter((s) => s.day === day && s.period !== period)
       .map((s) => ({ period: s.period, type: s.type }))
     daySlots.push({ period, type: form.type })
-    const validation = validateTimetableDay(daySlots)
+    const validation = validateTimetableDay(daySlots, { maxTeachingPeriods: periodsPerDay })
     if (!validation.ok) {
       pushToast({ title: "Can't save this slot", description: validation.errors[0] })
       return
