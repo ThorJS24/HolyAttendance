@@ -1,8 +1,10 @@
 import {
   computeAttendance,
   aggregateOverall,
+  jsDayToWeekday,
   type ComputeAttendanceParams,
   type BucketStats,
+  type Weekday,
 } from './attendance-engine'
 
 export type TrendGranularity = 'week' | 'month'
@@ -78,4 +80,37 @@ export function computeDailyAttendance(params: ComputeAttendanceParams): Map<str
     result.set(date, overall)
   }
   return result
+}
+
+export interface WeekdayAttendance {
+  day: Weekday
+  stats: BucketStats
+}
+
+const WEEKDAY_ORDER: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+/**
+ * Attendance grouped by day-of-week (Mon-Sat, matching the timetable's own
+ * model) rather than by date — "which day do I actually skip" instead of
+ * "how am I doing over time". Always returns all six days in order, even
+ * ones with zero records, so the caller doesn't need to backfill gaps.
+ */
+export function computeWeekdayAttendance(params: ComputeAttendanceParams): WeekdayAttendance[] {
+  const { records, slots, holidays, yellowForms, rules } = params
+
+  const recordsByWeekday = new Map<Weekday, typeof records>()
+  for (const r of records) {
+    const day = jsDayToWeekday(r.date)
+    if (!day) continue
+    const list = recordsByWeekday.get(day)
+    if (list) list.push(r)
+    else recordsByWeekday.set(day, [r])
+  }
+
+  return WEEKDAY_ORDER.map((day) => ({
+    day,
+    stats: aggregateOverall(
+      computeAttendance({ records: recordsByWeekday.get(day) ?? [], slots, holidays, yellowForms, rules }),
+    ),
+  }))
 }

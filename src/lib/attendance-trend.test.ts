@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeAttendanceTrend, computeDailyAttendance } from './attendance-trend'
+import { computeAttendanceTrend, computeDailyAttendance, computeWeekdayAttendance } from './attendance-trend'
 import type { PeriodTypeRule, AttendanceRecordInput } from './attendance-engine'
 
 const RULES: PeriodTypeRule[] = [{ type: 'class', bucket: 'normal' }]
@@ -64,5 +64,35 @@ describe('computeDailyAttendance', () => {
 
     expect(daily.get('2026-01-05')).toEqual({ total: 1, attended: 1, percentage: 100 })
     expect(daily.get('2026-01-06')).toEqual({ total: 2, attended: 0, percentage: 0 })
+  })
+})
+
+describe('computeWeekdayAttendance', () => {
+  it('always returns all six weekdays in order, even with zero records', () => {
+    const result = computeWeekdayAttendance({ records: [], slots: [], holidays: [], yellowForms: [], rules: RULES })
+    expect(result.map((r) => r.day)).toEqual(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
+    expect(result.every((r) => r.stats.percentage === null && r.stats.total === 0)).toBe(true)
+  })
+
+  it('groups records by day-of-week across different calendar weeks, not per-date', () => {
+    // 2026-01-05 and 2026-01-12 are both Mondays; 2026-01-06 is a Tuesday.
+    const records = [
+      record('2026-01-05', 'present'),
+      record('2026-01-12', 'absent'),
+      record('2026-01-06', 'present'),
+    ]
+    const result = computeWeekdayAttendance({ records, slots: [], holidays: [], yellowForms: [], rules: RULES })
+
+    const mon = result.find((r) => r.day === 'mon')!
+    const tue = result.find((r) => r.day === 'tue')!
+    expect(mon.stats).toEqual({ total: 2, attended: 1, percentage: 50 })
+    expect(tue.stats).toEqual({ total: 1, attended: 1, percentage: 100 })
+  })
+
+  it('excludes Sunday-dated records (the app only models Mon-Sat)', () => {
+    // 2026-01-11 is a Sunday.
+    const records = [record('2026-01-11', 'present')]
+    const result = computeWeekdayAttendance({ records, slots: [], holidays: [], yellowForms: [], rules: RULES })
+    expect(result.every((r) => r.stats.total === 0)).toBe(true)
   })
 })

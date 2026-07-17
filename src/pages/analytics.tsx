@@ -29,7 +29,12 @@ import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { usePeriodTypeRulesStore } from '@/store/period-type-rules-store'
 import { useAttendance } from '@/hooks/use-attendance'
 import { computeAttendance, aggregateOverall } from '@/lib/attendance-engine'
-import { computeAttendanceTrend, computeDailyAttendance, type TrendGranularity } from '@/lib/attendance-trend'
+import {
+  computeAttendanceTrend,
+  computeDailyAttendance,
+  computeWeekdayAttendance,
+  type TrendGranularity,
+} from '@/lib/attendance-trend'
 import { categoricalColor, sequentialColor } from '@/lib/chart-colors'
 import { buildSubjectRows, exportReport, type ReportFormat } from '@/lib/report-export'
 import { scopeRecordsToSubjects } from '@/lib/semester-scope'
@@ -53,6 +58,7 @@ function mondayOnOrBefore(iso: string): string {
 
 const HEATMAP_WEEKS = 12
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const WEEKDAY_SHORT_LABELS: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat' }
 
 export function AnalyticsPage() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
@@ -161,6 +167,23 @@ export function AnalyticsPage() {
     () => computeDailyAttendance({ records: scopedRecords, slots, holidays, yellowForms, rules }),
     [scopedRecords, slots, holidays, yellowForms, rules],
   )
+
+  const weekdayData = useMemo(
+    () =>
+      computeWeekdayAttendance({ records: scopedRecords, slots, holidays, yellowForms, rules }).map((r) => ({
+        day: WEEKDAY_SHORT_LABELS[r.day],
+        percentage: r.stats.percentage ?? 0,
+        hasData: r.stats.total > 0,
+        total: r.stats.total,
+      })),
+    [scopedRecords, slots, holidays, yellowForms, rules],
+  )
+
+  const worstWeekday = useMemo(() => {
+    const withData = weekdayData.filter((d) => d.hasData)
+    if (withData.length === 0) return null
+    return withData.reduce((worst, d) => (d.percentage < worst.percentage ? d : worst))
+  }, [weekdayData])
 
   const heatmapWeeks = useMemo(() => {
     const endWeekMonday = mondayOnOrBefore(todayIso())
@@ -279,6 +302,42 @@ export function AnalyticsPage() {
               <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
                 {barData.map((entry, i) => (
                   <Cell key={i} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Attendance by weekday</CardTitle>
+          <CardDescription>
+            {worstWeekday
+              ? `You're most likely to be marked absent on ${worstWeekday.day} (${worstWeekday.percentage.toFixed(1)}%).`
+              : 'Which day of the week you actually attend the least — not enough history yet.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={weekdayData} margin={{ left: 0, right: 16, top: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+              <XAxis dataKey="day" stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
+              <YAxis domain={[0, 100]} stroke="var(--chart-axis)" tick={{ fontSize: 12 }} />
+              <ReferenceLine y={overallMinTarget} stroke="var(--warning)" strokeDasharray="4 4" />
+              <Tooltip
+                formatter={(value, _name, item) => [
+                  item.payload.hasData ? `${Number(value).toFixed(1)}%` : 'No data',
+                  'Attendance',
+                ]}
+                contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                {weekdayData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={!entry.hasData ? 'var(--chart-grid)' : entry.day === worstWeekday?.day ? 'var(--destructive)' : 'var(--chart-1)'}
+                  />
                 ))}
               </Bar>
             </BarChart>
