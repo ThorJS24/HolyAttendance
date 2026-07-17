@@ -93,7 +93,7 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardDescription>Overall attendance</CardDescription>
-            <CardTitle className={cn('text-3xl', percentColor(overall.percentage, overallMinTarget))}>
+            <CardTitle className={cn('text-3xl tabular-nums', percentColor(overall.percentage, overallMinTarget))}>
               {overall.percentage === null ? '—' : `${overall.percentage.toFixed(1)}%`}
             </CardTitle>
           </CardHeader>
@@ -110,7 +110,7 @@ export function DashboardPage() {
             <CardDescription className="flex items-center gap-1">
               <AlertTriangle className="size-3.5" /> Below target
             </CardDescription>
-            <CardTitle className="text-3xl">{belowTarget.length}</CardTitle>
+            <CardTitle className="text-3xl tabular-nums">{belowTarget.length}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
@@ -126,7 +126,7 @@ export function DashboardPage() {
             <CardDescription className="flex items-center gap-1">
               <CalendarDays className="size-3.5" /> Today
             </CardDescription>
-            <CardTitle className="text-3xl">{todaysClasses.length}</CardTitle>
+            <CardTitle className="text-3xl tabular-nums">{todaysClasses.length}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">

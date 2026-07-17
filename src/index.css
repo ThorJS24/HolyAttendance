@@ -33,30 +33,34 @@
 }
 
 :root {
-  --radius: 0.6rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* "Ledger" direction: warm paper ground, ink-blue accent, muted warm
+     semantic states — picked with the user from bunkmate-directions.html.
+     Chart colors below are untouched on purpose (validated palette, see the
+     dataviz skill's references/palette.md — not part of this pass). */
+  --radius: 0.5rem;
+  --background: oklch(0.975 0.006 85);
+  --foreground: oklch(0.19 0.01 75);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.19 0.01 75);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.55 0.2 265);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.6 0.15 145);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.75 0.17 75);
-  --warning-foreground: oklch(0.145 0 0);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.55 0.2 265);
+  --popover-foreground: oklch(0.19 0.01 75);
+  --primary: oklch(0.34 0.08 258);
+  --primary-foreground: oklch(0.98 0.01 90);
+  --secondary: oklch(0.94 0.012 80);
+  --secondary-foreground: oklch(0.19 0.01 75);
+  --muted: oklch(0.94 0.012 80);
+  --muted-foreground: oklch(0.5 0.02 75);
+  --accent: oklch(0.93 0.02 260);
+  --accent-foreground: oklch(0.34 0.08 258);
+  --destructive: oklch(0.5 0.16 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.45 0.09 155);
+  --success-foreground: oklch(0.98 0 0);
+  --warning: oklch(0.72 0.13 68);
+  --warning-foreground: oklch(0.19 0.01 75);
+  --border: oklch(0.88 0.02 80);
+  --input: oklch(0.88 0.02 80);
+  --ring: oklch(0.45 0.1 258);
 
   /* Chart palette (validated categorical order + sequential ramp; see the
      dataviz skill's references/palette.md — these are the reference hexes,
@@ -78,29 +82,29 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.19 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.19 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.7 0.18 265);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.65 0.22 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.65 0.15 145);
-  --success-foreground: oklch(0.145 0 0);
-  --warning: oklch(0.75 0.17 75);
-  --warning-foreground: oklch(0.145 0 0);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 18%);
-  --ring: oklch(0.7 0.18 265);
+  --background: oklch(0.16 0.01 75);
+  --foreground: oklch(0.93 0.015 80);
+  --card: oklch(0.21 0.012 75);
+  --card-foreground: oklch(0.93 0.015 80);
+  --popover: oklch(0.21 0.012 75);
+  --popover-foreground: oklch(0.93 0.015 80);
+  --primary: oklch(0.72 0.09 258);
+  --primary-foreground: oklch(0.16 0.01 75);
+  --secondary: oklch(0.26 0.015 75);
+  --secondary-foreground: oklch(0.93 0.015 80);
+  --muted: oklch(0.26 0.015 75);
+  --muted-foreground: oklch(0.72 0.03 75);
+  --accent: oklch(0.28 0.04 258);
+  --accent-foreground: oklch(0.72 0.09 258);
+  --destructive: oklch(0.62 0.15 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.72 0.11 155);
+  --success-foreground: oklch(0.16 0.01 75);
+  --warning: oklch(0.72 0.13 68);
+  --warning-foreground: oklch(0.16 0.01 75);
+  --border: oklch(0.32 0.02 75);
+  --input: oklch(0.32 0.02 75);
+  --ring: oklch(0.72 0.09 258);
 
   --chart-1: #3987e5;
   --chart-2: #008300;
@@ -131,5 +135,16 @@
     @apply bg-background text-foreground;
     font: 14px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
     margin: 0;
+  }
+
+  /* Ledger display face: page titles, card titles, dialog titles — every
+     heading-level element already carries a data-slot from the shared
+     shadcn primitives, so this is one rule instead of touching every page. */
+  h1,
+  [data-slot='card-title'],
+  [data-slot='dialog-title'],
+  [data-slot='alert-title'] {
+    font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+    letter-spacing: -0.01em;
   }
 }
