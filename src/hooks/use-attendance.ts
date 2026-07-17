@@ -5,6 +5,7 @@ import { useHolidaysStore } from '@/store/holidays-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { usePeriodTypeRulesStore } from '@/store/period-type-rules-store'
 import { useSemestersStore } from '@/store/semesters-store'
+import { useSubjectsStore } from '@/store/subjects-store'
 import {
   computeAttendance,
   aggregateOverall,
@@ -13,6 +14,7 @@ import {
   type SubjectAttendance,
 } from '@/lib/attendance-engine'
 import { autoPresentRecords, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
+import { scopeRecordsToSubjects } from '@/lib/semester-scope'
 import { todayIso } from '@/lib/date-utils'
 
 export interface UseAttendanceResult {
@@ -47,17 +49,35 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
   const semesters = useSemestersStore((s) => s.semesters)
   const loadSemesters = useSemestersStore((s) => s.load)
 
+  // Subjects carry the `semester` text field that's the only way to scope
+  // attendance records to "this semester" — AttendanceRecordFilter has no
+  // semester concept (see electron/db/repositories/attendance-records.ts),
+  // so records are scoped below by intersecting with this semester's
+  // subject ids, not trusted from whatever a caller last loaded.
+  const subjects = useSubjectsStore((s) => s.subjects)
+  const loadSubjects = useSubjectsStore((s) => s.load)
+
   useEffect(() => {
     loadRecords()
     loadHolidays()
     loadYellowForms()
     loadRules()
     loadSemesters()
-  }, [loadRecords, loadHolidays, loadYellowForms, loadRules, loadSemesters])
+    loadSubjects({ includeArchived: false })
+  }, [loadRecords, loadHolidays, loadYellowForms, loadRules, loadSemesters, loadSubjects])
 
   useEffect(() => {
     if (semester) loadSlots(semester)
   }, [loadSlots, semester])
+
+  const semesterSubjectIds = useMemo(
+    () => subjects.filter((s) => s.semester === semester).map((s) => s.id),
+    [subjects, semester],
+  )
+  const scopedRecords = useMemo(
+    () => scopeRecordsToSubjects(records, semesterSubjectIds),
+    [records, semesterSubjectIds],
+  )
 
   // A class crossing its end-time should flip to auto-present without the
   // user having to touch anything else first, so re-read "now" every minute.
@@ -81,14 +101,14 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
 
     const autoPresent = autoPresentRecords({
       scheduledPeriods,
-      records,
+      records: scopedRecords,
       todayIso: today,
       nowMinutes,
       periodEndMinutes,
     })
 
-    return computeAttendance({ records: [...records, ...autoPresent], slots, holidays, yellowForms, rules })
-  }, [records, slots, holidays, yellowForms, rules, nowMinutes, semesters, semester])
+    return computeAttendance({ records: [...scopedRecords, ...autoPresent], slots, holidays, yellowForms, rules })
+  }, [scopedRecords, slots, holidays, yellowForms, rules, nowMinutes, semesters, semester])
 
   const overall = useMemo(() => aggregateOverall(bySubject), [bySubject])
 

@@ -16,6 +16,7 @@ import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { usePeriodTypeRulesStore } from '@/store/period-type-rules-store'
 import { useLeavePlansStore } from '@/store/leave-plans-store'
 import { useAttendance } from '@/hooks/use-attendance'
+import { scopeRecordsToSubjects } from '@/lib/semester-scope'
 import { todayIso } from '@/lib/date-utils'
 import {
   computeAttendance,
@@ -125,6 +126,20 @@ export function PlannerPage() {
   const rules = usePeriodTypeRulesStore((s) => s.rules)
   const { bySubject: baseline, overall: baselineOverall } = useAttendance(semester)
 
+  // `records` above is the raw, unscoped attendance-records store (no
+  // semester concept — see semester-scope.ts) — every scenario below layers
+  // hypothetical records on top of it, so it has to be scoped to this
+  // semester's subjects first or a different semester's history leaks into
+  // every "after" projection.
+  const currentSemesterSubjectIds = useMemo(
+    () => subjects.filter((s) => s.semester === semester).map((s) => s.id),
+    [subjects, semester],
+  )
+  const scopedRecords = useMemo(
+    () => scopeRecordsToSubjects(records, currentSemesterSubjectIds),
+    [records, currentSemesterSubjectIds],
+  )
+
   const { plans, load: loadPlans, create: createPlan, update: updatePlan, remove: removePlan } =
     useLeavePlansStore()
 
@@ -141,26 +156,26 @@ export function PlannerPage() {
     const periods = enumerateScheduledPeriods({ slots, holidays, startDate: tomorrow, endDate: tomorrow })
       .filter((p) => bunkSubjectId === 'all' || String(p.subjectId) === bunkSubjectId)
     const hypothetical = projectRecords(periods, 'absent')
-    const after = computeAttendance({ records: [...records, ...hypothetical], slots, holidays, yellowForms, rules })
+    const after = computeAttendance({ records: [...scopedRecords, ...hypothetical], slots, holidays, yellowForms, rules })
     return {
       rows: buildComparisonRows(subjects, baseline, after),
       overallAfter: aggregateOverall(after),
       periodCount: periods.length,
     }
-  }, [slots, holidays, tomorrow, bunkSubjectId, records, yellowForms, rules, subjects, baseline])
+  }, [slots, holidays, tomorrow, bunkSubjectId, scopedRecords, yellowForms, rules, subjects, baseline])
 
   // --- Scenario 2: Attend everything remaining ---------------------------
   const [attendEndDate, setAttendEndDate] = useState(() => addDays(todayIso(), 30))
   const attendComparison = useMemo(() => {
     const periods = enumerateScheduledPeriods({ slots, holidays, startDate: tomorrow, endDate: attendEndDate })
     const hypothetical = projectRecords(periods, 'present')
-    const after = computeAttendance({ records: [...records, ...hypothetical], slots, holidays, yellowForms, rules })
+    const after = computeAttendance({ records: [...scopedRecords, ...hypothetical], slots, holidays, yellowForms, rules })
     return {
       rows: buildComparisonRows(subjects, baseline, after),
       overallAfter: aggregateOverall(after),
       periodCount: periods.length,
     }
-  }, [slots, holidays, tomorrow, attendEndDate, records, yellowForms, rules, subjects, baseline])
+  }, [slots, holidays, tomorrow, attendEndDate, scopedRecords, yellowForms, rules, subjects, baseline])
 
   // --- Scenario 3: Leave for N days ---------------------------------------
   const [leaveStart, setLeaveStart] = useState(tomorrow)
@@ -173,13 +188,13 @@ export function PlannerPage() {
   const leaveComparison = useMemo(() => {
     const periods = scheduledPeriodsForDates({ slots, holidays, dates: leaveDates })
     const hypothetical = projectRecords(periods, 'absent')
-    const after = computeAttendance({ records: [...records, ...hypothetical], slots, holidays, yellowForms, rules })
+    const after = computeAttendance({ records: [...scopedRecords, ...hypothetical], slots, holidays, yellowForms, rules })
     return {
       rows: buildComparisonRows(subjects, baseline, after),
       overallAfter: aggregateOverall(after),
       periodCount: periods.length,
     }
-  }, [slots, holidays, leaveDates, records, yellowForms, rules, subjects, baseline])
+  }, [slots, holidays, leaveDates, scopedRecords, yellowForms, rules, subjects, baseline])
 
   async function handleSaveLeavePlan() {
     await createPlan({ label: leaveLabel || null, dates: leaveDates, status: 'planned' })
@@ -194,9 +209,9 @@ export function PlannerPage() {
     const withApproval = yellowForms.map((f) =>
       f.id === Number(formId) ? { ...f, status: 'approved' as const } : f,
     )
-    const after = computeAttendance({ records, slots, holidays, yellowForms: withApproval, rules })
+    const after = computeAttendance({ records: scopedRecords, slots, holidays, yellowForms: withApproval, rules })
     return { rows: buildComparisonRows(subjects, baseline, after), overallAfter: aggregateOverall(after) }
-  }, [formId, yellowForms, records, slots, holidays, rules, subjects, baseline])
+  }, [formId, yellowForms, scopedRecords, slots, holidays, rules, subjects, baseline])
 
   // --- Compare saved leave plans side by side -----------------------------
   const [comparePlanIds, setComparePlanIds] = useState<number[]>([])
@@ -206,10 +221,10 @@ export function PlannerPage() {
       if (!plan) return null
       const periods = scheduledPeriodsForDates({ slots, holidays, dates: plan.dates })
       const hypothetical = projectRecords(periods, 'absent')
-      const after = computeAttendance({ records: [...records, ...hypothetical], slots, holidays, yellowForms, rules })
+      const after = computeAttendance({ records: [...scopedRecords, ...hypothetical], slots, holidays, yellowForms, rules })
       return { plan, overall: aggregateOverall(after) }
     }).filter((x): x is NonNullable<typeof x> => x !== null)
-  }, [comparePlanIds, plans, slots, holidays, records, yellowForms, rules])
+  }, [comparePlanIds, plans, slots, holidays, scopedRecords, yellowForms, rules])
 
   function togglePlanCompare(id: number) {
     setComparePlanIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))

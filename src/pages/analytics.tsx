@@ -32,6 +32,7 @@ import { computeAttendance, aggregateOverall } from '@/lib/attendance-engine'
 import { computeAttendanceTrend, computeDailyAttendance, type TrendGranularity } from '@/lib/attendance-trend'
 import { categoricalColor, sequentialColor } from '@/lib/chart-colors'
 import { buildSubjectRows, exportReport, type ReportFormat } from '@/lib/report-export'
+import { scopeRecordsToSubjects } from '@/lib/semester-scope'
 import { useToastStore } from '@/store/toast-store'
 import { todayIso } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
@@ -85,6 +86,34 @@ export function AnalyticsPage() {
     [allSemesters],
   )
 
+  // `records` above is the raw, unscoped attendance-records store — it has
+  // no semester concept at all (see semester-scope.ts). Subjects carry the
+  // `semester` text field that's the only way to attribute a record to a
+  // semester, so every use below scopes records through this map rather
+  // than feeding the raw store straight into computeAttendance().
+  const subjectIdsBySemesterLabel = useMemo(() => {
+    const map = new Map<string, number[]>()
+    for (const s of subjects) {
+      const list = map.get(s.semester)
+      if (list) list.push(s.id)
+      else map.set(s.semester, [s.id])
+    }
+    return map
+  }, [subjects])
+
+  const currentSemesterSubjects = useMemo(
+    () => subjects.filter((s) => s.semester === semester),
+    [subjects, semester],
+  )
+  const currentSemesterSubjectIds = useMemo(
+    () => subjectIdsBySemesterLabel.get(semester ?? '') ?? [],
+    [subjectIdsBySemesterLabel, semester],
+  )
+  const scopedRecords = useMemo(
+    () => scopeRecordsToSubjects(records, currentSemesterSubjectIds),
+    [records, currentSemesterSubjectIds],
+  )
+
   useEffect(() => {
     let cancelled = false
     Promise.all(
@@ -101,15 +130,16 @@ export function AnalyticsPage() {
     () =>
       comparableSemesters.map((s) => {
         const semesterSlots = slotsBySemester[s.label] ?? []
-        const stats = aggregateOverall(computeAttendance({ records, slots: semesterSlots, holidays, yellowForms, rules }))
+        const semesterRecords = scopeRecordsToSubjects(records, subjectIdsBySemesterLabel.get(s.label) ?? [])
+        const stats = aggregateOverall(computeAttendance({ records: semesterRecords, slots: semesterSlots, holidays, yellowForms, rules }))
         return { label: s.label, percentage: stats.percentage ?? 0, isCurrent: s.label === currentSemester }
       }),
-    [comparableSemesters, slotsBySemester, records, holidays, yellowForms, rules, currentSemester],
+    [comparableSemesters, slotsBySemester, records, subjectIdsBySemesterLabel, holidays, yellowForms, rules, currentSemester],
   )
 
   const subjectRows = useMemo(
-    () => buildSubjectRows(subjects, bySubject, subjectMinTarget),
-    [subjects, bySubject, subjectMinTarget],
+    () => buildSubjectRows(currentSemesterSubjects, bySubject, subjectMinTarget),
+    [currentSemesterSubjects, bySubject, subjectMinTarget],
   )
 
   const barData = useMemo(
@@ -123,13 +153,13 @@ export function AnalyticsPage() {
   )
 
   const trend = useMemo(
-    () => computeAttendanceTrend({ records, slots, holidays, yellowForms, rules, granularity }),
-    [records, slots, holidays, yellowForms, rules, granularity],
+    () => computeAttendanceTrend({ records: scopedRecords, slots, holidays, yellowForms, rules, granularity }),
+    [scopedRecords, slots, holidays, yellowForms, rules, granularity],
   )
 
   const dailyStats = useMemo(
-    () => computeDailyAttendance({ records, slots, holidays, yellowForms, rules }),
-    [records, slots, holidays, yellowForms, rules],
+    () => computeDailyAttendance({ records: scopedRecords, slots, holidays, yellowForms, rules }),
+    [scopedRecords, slots, holidays, yellowForms, rules],
   )
 
   const heatmapWeeks = useMemo(() => {
@@ -156,7 +186,7 @@ export function AnalyticsPage() {
           overallMinTarget,
           overall,
           subjects: subjectRows,
-          attendanceHistory: [...records]
+          attendanceHistory: [...scopedRecords]
             .sort((a, b) => (a.date < b.date ? 1 : -1))
             .map((r) => ({
               date: r.date,

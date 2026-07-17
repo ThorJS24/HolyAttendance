@@ -13,6 +13,8 @@ import * as holidaysRepo from './holidays'
 import * as leavePlansRepo from './leave-plans'
 import * as yellowFormsRepo from './yellow-forms'
 import * as settingsRepo from './settings'
+import { computeAttendance, aggregateOverall } from '../../../src/lib/attendance-engine'
+import { scopeRecordsToSubjects } from '../../../src/lib/semester-scope'
 
 function createTestDb(): AppDatabase {
   const sqlite = new Database(':memory:')
@@ -270,6 +272,81 @@ describe('attendance records repository', () => {
     expect(second.id).toBe(first.id)
     expect(second.status).toBe('present')
     expect(attendanceRecordsRepo.listAttendanceRecords(db, { subjectId: subject.id })).toHaveLength(1)
+  })
+})
+
+// Part A audit (see the same bug class fixed in bunkmate-web's Analytics
+// work): AttendanceRecordFilter has no semester concept — a listAttendanceRecords
+// call with no filter (or a date-range-only filter) returns records for
+// every semester's subjects at once. use-attendance.ts, planner.tsx, and
+// analytics.tsx all read from that same unscoped store, so bySubject/
+// aggregateOverall have to be scoped to the active semester's subjects
+// after the fetch, via scopeRecordsToSubjects — this proves both that the
+// raw fetch really does leak and that the fix eliminates it.
+describe('cross-semester attendance-record leakage (Part A audit)', () => {
+  let db: AppDatabase
+  beforeEach(() => {
+    db = createTestDb()
+  })
+
+  it('an unfiltered fetch leaks another semester\'s subject, and scopeRecordsToSubjects removes it', () => {
+    const physics = subjectsRepo.createSubject(db, {
+      name: 'Physics',
+      semester: '2025-2',
+      credits: 4,
+      faculty: null,
+      category: null,
+    })
+    const chemistry = subjectsRepo.createSubject(db, {
+      name: 'Chemistry',
+      semester: '2026-1',
+      credits: 4,
+      faculty: null,
+      category: null,
+    })
+
+    // Chemistry (semester 2026-1, the one being viewed): 3 present, 1 absent.
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: chemistry.id, date: '2026-02-01', period: 1, status: 'present', source: 'manual', slotId: null })
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: chemistry.id, date: '2026-02-02', period: 1, status: 'present', source: 'manual', slotId: null })
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: chemistry.id, date: '2026-02-03', period: 1, status: 'present', source: 'manual', slotId: null })
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: chemistry.id, date: '2026-02-04', period: 1, status: 'absent', source: 'manual', slotId: null })
+    // Physics (semester 2025-2, a different semester) — its window overlaps
+    // 2026-1's, e.g. a late-logged makeup class. Both absent, so if it
+    // leaks in it drags the overall percentage down.
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: physics.id, date: '2026-01-28', period: 2, status: 'absent', source: 'manual', slotId: null })
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: physics.id, date: '2026-01-29', period: 2, status: 'absent', source: 'manual', slotId: null })
+
+    // Exactly the shape use-attendance.ts's loadRecords() calls (no filter
+    // at all — the store fetches everything, unconditionally).
+    const rawRecords = attendanceRecordsRepo.listAttendanceRecords(db, {})
+
+    // 1. Prove the leakage is real: the raw response contains Physics
+    //    (a different semester's subject) alongside Chemistry.
+    const rawSubjectIds = new Set(rawRecords.map((r) => r.subjectId))
+    expect(rawSubjectIds.has(physics.id)).toBe(true)
+    expect(rawSubjectIds.has(chemistry.id)).toBe(true)
+
+    const pollutedOverall = aggregateOverall(
+      computeAttendance({ records: rawRecords, slots: [], holidays: [], yellowForms: [], rules: [] }),
+    )
+    // Correct (Chemistry only) would be 75%; Physics leaking in drags it down.
+    expect(pollutedOverall.total).toBe(6)
+    expect(pollutedOverall.attended).toBe(3)
+    expect(pollutedOverall.percentage).toBe(50)
+
+    // 2. Apply the fix (what use-attendance.ts / planner.tsx / analytics.tsx
+    //    now do) and confirm Physics is gone and the percentage matches
+    //    Chemistry alone.
+    const scoped = scopeRecordsToSubjects(rawRecords, [chemistry.id])
+    expect(scoped.every((r) => r.subjectId === chemistry.id)).toBe(true)
+    expect(scoped).toHaveLength(4)
+
+    const correctOverall = aggregateOverall(
+      computeAttendance({ records: scoped, slots: [], holidays: [], yellowForms: [], rules: [] }),
+    )
+    expect(correctOverall.total).toBe(4)
+    expect(correctOverall.attended).toBe(3)
+    expect(correctOverall.percentage).toBe(75)
   })
 })
 
