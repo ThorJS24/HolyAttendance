@@ -15,16 +15,44 @@ import { GlobalSearch } from '@/components/global-search'
 import { NotificationCenter } from '@/components/notification-center'
 import { ErrorBoundary } from '@/components/error-boundary'
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/subjects', label: 'Subjects', icon: BookOpen },
-  { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
-  { to: '/timetable', label: 'Timetable', icon: Table2 },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { to: '/planner', label: 'Planner', icon: Wand2 },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { to: '/semesters', label: 'Semesters', icon: GraduationCap },
-  { to: '/settings', label: 'Settings', icon: Settings },
+interface NavItem {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  end?: boolean
+}
+
+// Grouped so the sidebar reads as "what am I doing" rather than a flat list
+// of every page — day-to-day tracking, then planning/insight, then one-time
+// setup, in that order.
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Overview',
+    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }],
+  },
+  {
+    label: 'Track',
+    items: [
+      { to: '/subjects', label: 'Subjects', icon: BookOpen },
+      { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
+      { to: '/timetable', label: 'Timetable', icon: Table2 },
+      { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+    ],
+  },
+  {
+    label: 'Plan',
+    items: [
+      { to: '/planner', label: 'Planner', icon: Wand2 },
+      { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Setup',
+    items: [
+      { to: '/semesters', label: 'Semesters', icon: GraduationCap },
+      { to: '/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ]
 
 export function AppShell() {
@@ -35,24 +63,31 @@ export function AppShell() {
         <div className="flex h-14 items-center border-b px-4">
           <span className="text-lg font-semibold">BunkMate Pro</span>
         </div>
-        <nav className="flex-1 space-y-1 p-2">
-          {navItems.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                )
-              }
-            >
-              <Icon className="size-4" />
-              {label}
-            </NavLink>
+        <nav className="flex-1 space-y-4 overflow-y-auto p-2">
+          {navGroups.map((group) => (
+            <div key={group.label} className="space-y-1">
+              <p className="px-3 text-[11px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                {group.label}
+              </p>
+              {group.items.map(({ to, label, icon: Icon, end }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                    )
+                  }
+                >
+                  <Icon className="size-4" />
+                  {label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
       </aside>
