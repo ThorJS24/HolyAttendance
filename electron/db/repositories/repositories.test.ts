@@ -411,6 +411,47 @@ describe('yellow forms repository', () => {
     yellowFormsRepo.deleteYellowForm(db, form.id)
     expect(yellowFormsRepo.listYellowForms(db)).toHaveLength(0)
   })
+
+  it('files a dispute against a decided form, logs it, and resolves it through their own actions — never a generic edit', () => {
+    const db = createTestDb()
+    const subject = subjectsRepo.createSubject(db, { name: 'Compilers', semester: '2026-1', credits: 3, faculty: null, category: null })
+    const form = yellowFormsRepo.createYellowForm(db, { date: '2026-01-15', subjectId: subject.id, period: 2, reason: 'Medical' })
+
+    // Can't dispute a still-pending form.
+    expect(() => yellowFormsRepo.fileYellowFormDispute(db, form.id, 'Not fair')).toThrow(/approved or rejected/)
+
+    yellowFormsRepo.setYellowFormStatus(db, form.id, 'rejected')
+    const disputed = yellowFormsRepo.fileYellowFormDispute(db, form.id, 'I had a doctor\'s note')
+    expect(disputed.disputeStatus).toBe('disputed')
+    expect(disputed.status).toBe('rejected') // filing a dispute never touches the underlying decision
+
+    const dispute = yellowFormsRepo.getYellowFormDispute(db, form.id)
+    expect(dispute?.note).toBe("I had a doctor's note")
+    expect(dispute?.outcome).toBeNull()
+    expect(dispute?.resolvedAt).toBeNull()
+
+    // Can't file a second dispute on the same form.
+    expect(() => yellowFormsRepo.fileYellowFormDispute(db, form.id, 'again')).toThrow(/already has a dispute/)
+
+    const resolved = yellowFormsRepo.resolveYellowFormDispute(db, form.id, 'overturned')
+    expect(resolved.disputeStatus).toBe('resolved')
+    expect(resolved.status).toBe('rejected') // resolving a dispute doesn't itself flip the decision
+
+    const resolvedDispute = yellowFormsRepo.getYellowFormDispute(db, form.id)
+    expect(resolvedDispute?.outcome).toBe('overturned')
+    expect(resolvedDispute?.resolvedAt).not.toBeNull()
+
+    // Can't resolve an already-resolved dispute again.
+    expect(() => yellowFormsRepo.resolveYellowFormDispute(db, form.id, 'upheld')).toThrow(/already been resolved/)
+  })
+
+  it('resolving without a filed dispute is rejected', () => {
+    const db = createTestDb()
+    const subject = subjectsRepo.createSubject(db, { name: 'Compilers', semester: '2026-1', credits: 3, faculty: null, category: null })
+    const form = yellowFormsRepo.createYellowForm(db, { date: '2026-01-15', subjectId: subject.id, period: 2, reason: null })
+    yellowFormsRepo.setYellowFormStatus(db, form.id, 'approved')
+    expect(() => yellowFormsRepo.resolveYellowFormDispute(db, form.id, 'upheld')).toThrow(/No dispute on record/)
+  })
 })
 
 describe('semesters repository', () => {

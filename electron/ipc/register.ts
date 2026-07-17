@@ -89,6 +89,15 @@ export function registerIpcHandlers(db: AppDatabase): void {
     yellowFormsRepo.setYellowFormStatus(db, id, status),
   )
   ipcMain.handle(IPC_CHANNELS.yellowFormsDelete, (_e, id: number) => yellowFormsRepo.deleteYellowForm(db, id))
+  ipcMain.handle(IPC_CHANNELS.yellowFormsGetDispute, (_e, yellowFormId: number) =>
+    yellowFormsRepo.getYellowFormDispute(db, yellowFormId),
+  )
+  ipcMain.handle(IPC_CHANNELS.yellowFormsFileDispute, (_e, yellowFormId: number, note: string) =>
+    yellowFormsRepo.fileYellowFormDispute(db, yellowFormId, note),
+  )
+  ipcMain.handle(IPC_CHANNELS.yellowFormsResolveDispute, (_e, yellowFormId: number, outcome) =>
+    yellowFormsRepo.resolveYellowFormDispute(db, yellowFormId, outcome),
+  )
 
   ipcMain.handle(IPC_CHANNELS.settingsGet, () => settingsRepo.getSettings(db))
   ipcMain.handle(IPC_CHANNELS.settingsUpdate, (_e, input) => settingsRepo.updateSettings(db, input))

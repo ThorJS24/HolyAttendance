@@ -17,7 +17,13 @@ import type {
 } from '../db/repositories/attendance-records'
 import type { Holiday, NewHoliday, HolidayUpdate } from '../db/repositories/holidays'
 import type { LeavePlan, NewLeavePlan, LeavePlanUpdate } from '../db/repositories/leave-plans'
-import type { YellowForm, NewYellowForm, YellowFormUpdate } from '../db/repositories/yellow-forms'
+import type {
+  YellowForm,
+  NewYellowForm,
+  YellowFormUpdate,
+  YellowFormDispute,
+} from '../db/repositories/yellow-forms'
+import type { YellowFormDisputeOutcome } from '../../src/db/schema'
 import type { Settings, SettingsUpdate } from '../db/repositories/settings'
 import type { PeriodTypeRule } from '../db/repositories/period-type-rules'
 
@@ -61,6 +67,9 @@ export const IPC_CHANNELS = {
   yellowFormsUpdate: 'yellowForms:update',
   yellowFormsSetStatus: 'yellowForms:setStatus',
   yellowFormsDelete: 'yellowForms:delete',
+  yellowFormsGetDispute: 'yellowForms:getDispute',
+  yellowFormsFileDispute: 'yellowForms:fileDispute',
+  yellowFormsResolveDispute: 'yellowForms:resolveDispute',
 
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
@@ -131,6 +140,12 @@ export interface BunkMateApi {
     update: (id: number, input: YellowFormUpdate) => Promise<YellowForm>
     setStatus: (id: number, status: YellowForm['status']) => Promise<YellowForm>
     delete: (id: number) => Promise<void>
+    /** Undefined if no dispute has been filed for this form. */
+    getDispute: (yellowFormId: number) => Promise<YellowFormDispute | undefined>
+    /** Throws if the form is still pending, or already has a dispute on record. */
+    fileDispute: (yellowFormId: number, note: string) => Promise<YellowForm>
+    /** Throws if there's no filed dispute, or it's already resolved. */
+    resolveDispute: (yellowFormId: number, outcome: YellowFormDisputeOutcome) => Promise<YellowForm>
   }
 
   settings: {

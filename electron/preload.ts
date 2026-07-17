@@ -59,6 +59,10 @@ const api: BunkMateApi = {
     update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsUpdate, id, input),
     setStatus: (id, status) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsSetStatus, id, status),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsDelete, id),
+    getDispute: (yellowFormId) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsGetDispute, yellowFormId),
+    fileDispute: (yellowFormId, note) => ipcRenderer.invoke(IPC_CHANNELS.yellowFormsFileDispute, yellowFormId, note),
+    resolveDispute: (yellowFormId, outcome) =>
+      ipcRenderer.invoke(IPC_CHANNELS.yellowFormsResolveDispute, yellowFormId, outcome),
   },
 
   settings: {

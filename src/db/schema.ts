@@ -25,6 +25,18 @@ export type LeavePlanStatus = (typeof LEAVE_PLAN_STATUSES)[number]
 export const YELLOW_FORM_STATUSES = ['pending', 'approved', 'rejected'] as const
 export type YellowFormStatus = (typeof YELLOW_FORM_STATUSES)[number]
 
+// Denormalized onto yellowForms itself so a list view doesn't need a join
+// just to know whether a form is under dispute. Deliberately kept separate
+// from YellowFormStatus rather than folded in (e.g. no 'disputed' status
+// value) — a dispute is a process layered on top of a decision, not a
+// replacement decision, so it gets its own log (yellowFormDisputes) and this
+// small flag.
+export const YELLOW_FORM_DISPUTE_STATUSES = ['none', 'disputed', 'resolved'] as const
+export type YellowFormDisputeStatus = (typeof YELLOW_FORM_DISPUTE_STATUSES)[number]
+
+export const YELLOW_FORM_DISPUTE_OUTCOMES = ['upheld', 'overturned'] as const
+export type YellowFormDisputeOutcome = (typeof YELLOW_FORM_DISPUTE_OUTCOMES)[number]
+
 // A semester's `label` (e.g. "2026-1") is the key subjects/timetableSlots
 // scope against — kept as a plain text match rather than a SQL foreign key
 // so existing free-text semester values on those tables keep working
@@ -161,9 +173,28 @@ export const yellowForms = sqliteTable('yellow_forms', {
   period: integer('period'),
   status: text('status').$type<YellowFormStatus>().notNull().default('pending'),
   reason: text('reason'),
+  disputeStatus: text('dispute_status').$type<YellowFormDisputeStatus>().notNull().default('none'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
+})
+
+// One dispute per yellow form (a resolved dispute isn't reopened — filing a
+// fresh one would mean deleting this row first, which the repository layer
+// doesn't expose on purpose). Only an approved or rejected form is
+// disputable; outcome/resolvedAt stay null until resolved.
+export const yellowFormDisputes = sqliteTable('yellow_form_disputes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  yellowFormId: integer('yellow_form_id')
+    .notNull()
+    .unique()
+    .references(() => yellowForms.id, { onDelete: 'cascade' }),
+  note: text('note').notNull(),
+  outcome: text('outcome').$type<YellowFormDisputeOutcome>(),
+  filedAt: integer('filed_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  resolvedAt: integer('resolved_at', { mode: 'timestamp' }),
 })
 
 // Singleton row (id = 1) holding app-wide settings.
@@ -196,5 +227,6 @@ export const schema = {
   holidays,
   leavePlans,
   yellowForms,
+  yellowFormDisputes,
   settings,
 }
