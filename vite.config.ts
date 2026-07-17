@@ -122,6 +122,15 @@ export default defineConfig(({ command }) => {
     },
     build: {
       outDir: 'dist',
+      // The remaining chunks over the default 500kB warning (exceljs,
+      // jspdf + its autotable plugin, html2canvas) are report-export
+      // dependencies pulled in via dynamic import() inside
+      // src/lib/report-export.ts — they only load when a user actually
+      // exports a report, never on app launch. Route-level code splitting
+      // (see App.tsx) already cut the real eagerly-loaded bundle from
+      // ~880kB to ~290kB; this just stops re-flagging the vendor libs we
+      // already know are lazy on purpose.
+      chunkSizeWarningLimit: 1000,
     },
     server: {
       port: 5173,
