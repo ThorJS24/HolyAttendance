@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2, TriangleAlert } from 'lucide-react'
+import { Trash2, Settings2, TriangleAlert, CopyPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -81,6 +82,10 @@ export function TimetablePage() {
   const [pendingPeriodTimes, setPendingPeriodTimes] = useState<PeriodTime[] | null>(null)
   const [reassignOpen, setReassignOpen] = useState(false)
   const [reassignChoice, setReassignChoice] = useState<Record<number, string>>({})
+  const [copyDayOpen, setCopyDayOpen] = useState(false)
+  const [copySourceDay, setCopySourceDay] = useState<Weekday>('mon')
+  const [copyTargetDays, setCopyTargetDays] = useState<Partial<Record<Weekday, boolean>>>({})
+  const [copying, setCopying] = useState(false)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -124,6 +129,60 @@ export function TimetablePage() {
       return next
     })
     pushToast({ title: 'Period reassigned', description: `${DAY_LABELS[slot.day]} · Period ${slot.period}` })
+  }
+
+  async function copyDay() {
+    const sourceSlots = slots.filter((s) => s.day === copySourceDay)
+    const sourceDaySlots = sourceSlots.map((s) => ({ period: s.period, type: s.type }))
+    const targets = WEEKDAYS.filter((d) => copyTargetDays[d] && d !== copySourceDay)
+    if (targets.length === 0) return
+
+    setCopying(true)
+    try {
+      const skipped: Weekday[] = []
+      for (const targetDay of targets) {
+        const validation = validateTimetableDay(sourceDaySlots, { maxTeachingPeriods: periodsPerDay })
+        if (!validation.ok) {
+          skipped.push(targetDay)
+          continue
+        }
+        // A copy replaces the target day outright — clear anything there
+        // that the source day doesn't also have at that period, then
+        // upsert every source slot onto it (createTimetableSlot already
+        // upserts on semester/day/period, so matching periods just update).
+        const sourcePeriods = new Set(sourceSlots.map((s) => s.period))
+        const staleOnTarget = slots.filter((s) => s.day === targetDay && !sourcePeriods.has(s.period))
+        for (const stale of staleOnTarget) await remove(stale.id)
+        for (const s of sourceSlots) {
+          await create({
+            semester,
+            day: targetDay,
+            period: s.period,
+            subjectId: s.subjectId,
+            type: s.type,
+            startTime: s.startTime,
+            endTime: s.endTime,
+          })
+        }
+      }
+      const copiedTo = targets.filter((d) => !skipped.includes(d))
+      if (copiedTo.length > 0) {
+        pushToast({
+          title: 'Day copied',
+          description: `${DAY_LABELS[copySourceDay]} → ${copiedTo.map((d) => DAY_LABELS[d]).join(', ')}`,
+        })
+      }
+      if (skipped.length > 0) {
+        pushToast({
+          title: "Couldn't copy to every target",
+          description: `${skipped.map((d) => DAY_LABELS[d]).join(', ')} would exceed the ${periodsPerDay}-period cap.`,
+        })
+      }
+      setCopyDayOpen(false)
+      setCopyTargetDays({})
+    } finally {
+      setCopying(false)
+    }
   }
 
   const slotAt = useMemo(() => {
@@ -259,6 +318,18 @@ export function TimetablePage() {
         <h1 className="text-2xl font-semibold">Timetable</h1>
         <div className="flex items-center gap-3">
           <SemesterSwitcher />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCopySourceDay('mon')
+              setCopyTargetDays({})
+              setCopyDayOpen(true)
+            }}
+            disabled={!activeSemester || slots.length === 0}
+          >
+            <CopyPlus /> Copy day
+          </Button>
           <Button variant="outline" size="sm" onClick={openGridSettings} disabled={!activeSemester}>
             <Settings2 /> Grid settings
           </Button>
@@ -564,6 +635,67 @@ export function TimetablePage() {
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setReassignOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={copyDayOpen} onOpenChange={setCopyDayOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copy day's schedule</DialogTitle>
+            <DialogDescription>
+              Replaces every period on the day(s) you pick below with an exact copy of the source day —
+              same type, same subject. Anything currently on a target day that the source day doesn't
+              also have gets cleared.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="copy-source">Copy from</Label>
+            <Select value={copySourceDay} onValueChange={(v) => setCopySourceDay(v as Weekday)}>
+              <SelectTrigger id="copy-source">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WEEKDAYS.map((day) => {
+                  const count = slots.filter((s) => s.day === day).length
+                  return (
+                    <SelectItem key={day} value={day}>
+                      {DAY_LABELS[day]} ({count} period{count === 1 ? '' : 's'})
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Copy to</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {WEEKDAYS.filter((d) => d !== copySourceDay).map((day) => (
+                <label key={day} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                  <Checkbox
+                    checked={copyTargetDays[day] ?? false}
+                    onCheckedChange={(checked) =>
+                      setCopyTargetDays((prev) => ({ ...prev, [day]: checked === true }))
+                    }
+                  />
+                  {DAY_LABELS[day]}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCopyDayOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={copying || Object.values(copyTargetDays).every((v) => !v)}
+              onClick={copyDay}
+            >
+              Copy
             </Button>
           </DialogFooter>
         </DialogContent>
