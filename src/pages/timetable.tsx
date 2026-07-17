@@ -43,6 +43,13 @@ const TYPE_VARIANT: Record<PeriodType, 'default' | 'secondary' | 'outline' | 'su
   lunch: 'outline',
 }
 
+// 'project' is retired: project work is now scheduled as a real Subject
+// (type 'class'), not a separate typeless bucket. Kept in PERIOD_TYPES/the
+// schema/the attendance engine's bucket table so existing slots still typed
+// 'project' keep working until reassigned via the banner below — this list
+// only controls what's offered for NEW selections.
+const SELECTABLE_PERIOD_TYPES = PERIOD_TYPES.filter((t) => t !== 'project')
+
 interface CellFormState {
   subjectId: string
   type: PeriodType
@@ -293,7 +300,7 @@ export function TimetablePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PERIOD_TYPES.map((t) => (
+                  {SELECTABLE_PERIOD_TYPES.map((t) => (
                     <SelectItem key={t} value={t}>
                       {t}
                     </SelectItem>
