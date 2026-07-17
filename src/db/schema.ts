@@ -37,6 +37,17 @@ export type YellowFormDisputeStatus = (typeof YELLOW_FORM_DISPUTE_STATUSES)[numb
 export const YELLOW_FORM_DISPUTE_OUTCOMES = ['upheld', 'overturned'] as const
 export type YellowFormDisputeOutcome = (typeof YELLOW_FORM_DISPUTE_OUTCOMES)[number]
 
+// One entry per period row shown on the Timetable grid for a semester
+// (teaching periods + lunch), produced by allocateEvenPeriodTimes() in
+// src/lib/period-time-allocation.ts. Shape duplicated there on purpose
+// rather than imported, matching how attendance-engine.ts keeps its own
+// input types decoupled from the DB schema.
+export interface PeriodTime {
+  period: number
+  startTime: string
+  endTime: string
+}
+
 // A semester's `label` (e.g. "2026-1") is the key subjects/timetableSlots
 // scope against — kept as a plain text match rather than a SQL foreign key
 // so existing free-text semester values on those tables keep working
@@ -56,6 +67,12 @@ export const semesters = sqliteTable('semesters', {
   // teaching-period cap these interact with.
   periodsPerDay: integer('periods_per_day').notNull().default(7),
   lunchPeriod: integer('lunch_period').notNull().default(4),
+  // Null means "not auto-allocated yet" — the Timetable grid falls back to
+  // plain "Period N" labels. Set via "Auto-allocate times" in Grid Settings;
+  // changing periodsPerDay, lunchPeriod, or the day start/end time afterward
+  // does NOT recompute this — it goes stale until re-run on purpose (see
+  // allocateEvenPeriodTimes in src/lib/period-time-allocation.ts).
+  periodTimes: text('period_times', { mode: 'json' }).$type<PeriodTime[]>(),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),

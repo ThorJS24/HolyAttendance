@@ -43,6 +43,13 @@
       "when": 1784269091315,
       "tag": "0005_add_yellow_form_disputes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784271997313,
+      "tag": "0006_add_period_times_to_semesters",
+      "breakpoints": true
     }
   ]
 }
