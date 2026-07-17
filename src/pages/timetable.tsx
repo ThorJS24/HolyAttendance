@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2, TriangleAlert, CopyPlus } from 'lucide-react'
+import { Trash2, Settings2, TriangleAlert, CopyPlus, CalendarRange, Table2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +25,7 @@ import type { TimetableSlot } from '../../electron/db/repositories/timetable-slo
 import { validateTimetableDay } from '@/lib/timetable-rules'
 import { allocateEvenPeriodTimes } from '@/lib/period-time-allocation'
 import { planDragDrop } from '@/lib/timetable-drag'
+import { TimetableWeekGlance } from '@/components/timetable-week-glance'
 import { cn } from '@/lib/utils'
 
 const DAY_LABELS: Record<Weekday, string> = {
@@ -87,6 +88,7 @@ export function TimetablePage() {
   const [copySourceDay, setCopySourceDay] = useState<Weekday>('mon')
   const [copyTargetDays, setCopyTargetDays] = useState<Partial<Record<Weekday, boolean>>>({})
   const [copying, setCopying] = useState(false)
+  const [view, setView] = useState<'grid' | 'week'>('grid')
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -255,6 +257,14 @@ export function TimetablePage() {
     setDialogTarget({ day, period })
   }
 
+  /** Week-at-a-glance is read-only — clicking a period there switches back
+   * to the editable grid and opens that exact cell, rather than mutating
+   * anything itself. */
+  function goToGridCell(day: Weekday, period: number) {
+    setView('grid')
+    openCell(day, period)
+  }
+
   function openGridSettings() {
     setGridForm({ periodsPerDay: String(periodsPerDay), lunchPeriod: String(lunchPeriod), dayStartTime: '', dayEndTime: '' })
     setPendingPeriodTimes(null)
@@ -371,21 +381,43 @@ export function TimetablePage() {
         <h1 className="text-2xl font-semibold">Timetable</h1>
         <div className="flex items-center gap-3">
           <SemesterSwitcher />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setCopySourceDay('mon')
-              setCopyTargetDays({})
-              setCopyDayOpen(true)
-            }}
-            disabled={!activeSemester || slots.length === 0}
-          >
-            <CopyPlus /> Copy day
-          </Button>
-          <Button variant="outline" size="sm" onClick={openGridSettings} disabled={!activeSemester}>
-            <Settings2 /> Grid settings
-          </Button>
+          <div className="flex rounded-md border p-0.5">
+            <Button
+              variant={view === 'grid' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7"
+              onClick={() => setView('grid')}
+            >
+              <Table2 /> Grid
+            </Button>
+            <Button
+              variant={view === 'week' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7"
+              onClick={() => setView('week')}
+            >
+              <CalendarRange /> Week overview
+            </Button>
+          </div>
+          {view === 'grid' && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCopySourceDay('mon')
+                  setCopyTargetDays({})
+                  setCopyDayOpen(true)
+                }}
+                disabled={!activeSemester || slots.length === 0}
+              >
+                <CopyPlus /> Copy day
+              </Button>
+              <Button variant="outline" size="sm" onClick={openGridSettings} disabled={!activeSemester}>
+                <Settings2 /> Grid settings
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -405,6 +437,15 @@ export function TimetablePage() {
         </div>
       )}
 
+      {view === 'week' ? (
+        <TimetableWeekGlance
+          slots={slots}
+          periodsPerDay={periodsPerDay}
+          periodTimeByPeriod={periodTimeByPeriod}
+          subjects={subjects}
+          onCellClick={goToGridCell}
+        />
+      ) : (
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -484,6 +525,7 @@ export function TimetablePage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <Dialog open={dialogTarget !== null} onOpenChange={(open) => !open && setDialogTarget(null)}>
         <DialogContent>
