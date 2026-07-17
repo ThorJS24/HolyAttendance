@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2 } from 'lucide-react'
+import { Trash2, Settings2, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -79,6 +79,8 @@ export function TimetablePage() {
   // editing periodsPerDay/lunchPeriod without re-running allocation doesn't
   // overwrite the existing (still valid until reassigned) stored times.
   const [pendingPeriodTimes, setPendingPeriodTimes] = useState<PeriodTime[] | null>(null)
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [reassignChoice, setReassignChoice] = useState<Record<number, string>>({})
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -100,6 +102,29 @@ export function TimetablePage() {
   )
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
+
+  // Slots still using the retired 'project' type, for this semester — the
+  // reassignment banner's whole reason to exist. Sorted so the list reads
+  // top-to-bottom the same way the grid does.
+  const projectSlots = useMemo(
+    () =>
+      slots
+        .filter((s) => s.type === 'project')
+        .sort((a, b) => a.period - b.period || WEEKDAYS.indexOf(a.day) - WEEKDAYS.indexOf(b.day)),
+    [slots],
+  )
+
+  async function reassignSlot(slot: TimetableSlot) {
+    const subjectId = Number(reassignChoice[slot.id])
+    if (!subjectId) return
+    await update(slot.id, { type: 'class', subjectId })
+    setReassignChoice((prev) => {
+      const next = { ...prev }
+      delete next[slot.id]
+      return next
+    })
+    pushToast({ title: 'Period reassigned', description: `${DAY_LABELS[slot.day]} · Period ${slot.period}` })
+  }
 
   const slotAt = useMemo(() => {
     const map = new Map<string, TimetableSlot>()
@@ -230,6 +255,22 @@ export function TimetablePage() {
           </Button>
         </div>
       </div>
+
+      {projectSlots.length > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
+          <div className="flex items-center gap-2">
+            <TriangleAlert className="size-4 shrink-0 text-warning" />
+            <span>
+              {projectSlots.length === 1
+                ? '1 period still uses the retired "project" type — reassign it to a real subject.'
+                : `${projectSlots.length} periods still use the retired "project" type — reassign them to a real subject.`}
+            </span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setReassignOpen(true)}>
+            Reassign now
+          </Button>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full border-collapse text-sm">
@@ -458,6 +499,57 @@ export function TimetablePage() {
               <Button type="submit">Save{pendingPeriodTimes ? ' & apply times' : ''}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reassign retired "project" periods</DialogTitle>
+            <DialogDescription>
+              Project work is now scheduled as a real subject (type "class"), not this typeless bucket. Pick a
+              subject for each period below — it'll switch to type "class" and start counting toward that
+              subject's own attendance instead of the generic Project Work total.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-80 space-y-2 overflow-y-auto">
+            {projectSlots.length === 0 ? (
+              <p className="text-sm text-muted-foreground">All periods have been reassigned.</p>
+            ) : (
+              projectSlots.map((slot) => (
+                <div key={slot.id} className="flex items-center gap-2 rounded-md border p-2">
+                  <span className="w-28 shrink-0 text-sm font-medium">
+                    {DAY_LABELS[slot.day]} · P{slot.period}
+                  </span>
+                  <Select
+                    value={reassignChoice[slot.id] ?? ''}
+                    onValueChange={(v) => setReassignChoice((prev) => ({ ...prev, [slot.id]: v }))}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Choose a subject…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjects.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" disabled={!reassignChoice[slot.id]} onClick={() => reassignSlot(slot)}>
+                    Reassign
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setReassignOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
