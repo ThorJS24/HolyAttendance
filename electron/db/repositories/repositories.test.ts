@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { eq } from 'drizzle-orm'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
@@ -13,6 +14,8 @@ import * as holidaysRepo from './holidays'
 import * as leavePlansRepo from './leave-plans'
 import * as yellowFormsRepo from './yellow-forms'
 import * as settingsRepo from './settings'
+import * as periodTypeRulesRepo from './period-type-rules'
+import { PERIOD_TYPES } from '../../../src/db/schema'
 import { computeAttendance, aggregateOverall } from '../../../src/lib/attendance-engine'
 import { scopeRecordsToSubjects } from '../../../src/lib/semester-scope'
 
@@ -451,6 +454,51 @@ describe('yellow forms repository', () => {
     const form = yellowFormsRepo.createYellowForm(db, { date: '2026-01-15', subjectId: subject.id, period: 2, reason: null })
     yellowFormsRepo.setYellowFormStatus(db, form.id, 'approved')
     expect(() => yellowFormsRepo.resolveYellowFormDispute(db, form.id, 'upheld')).toThrow(/No dispute on record/)
+  })
+})
+
+describe('period type rules repository', () => {
+  it('seeds every known period type with its default bucket on first run', () => {
+    const db = createTestDb()
+    expect(periodTypeRulesRepo.listPeriodTypeRules(db)).toEqual([])
+
+    const seeded = periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
+    const byType = new Map(seeded.map((r) => [r.type, r.bucket]))
+    expect(byType.get('class')).toBe('normal')
+    expect(byType.get('project')).toBe('project')
+    expect(byType.get('mentoring')).toBe('project')
+    expect(byType.get('minor')).toBe('project')
+    expect(byType.get('meeting')).toBe('excluded')
+    expect(byType.get('lunch')).toBe('ignored')
+    expect(seeded.map((r) => r.type).sort()).toEqual([...PERIOD_TYPES].sort())
+  })
+
+  it('is idempotent and never overwrites a bucket a user has already customized', () => {
+    const db = createTestDb()
+    periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
+
+    // A user reassigns 'meeting' from its default 'excluded' to 'normal'.
+    periodTypeRulesRepo.setPeriodTypeRuleBucket(db, 'meeting', 'normal')
+
+    // Re-running the seeder (as happens on every app start) must not stomp
+    // that customization back to the default.
+    const rules = periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
+    expect(rules.find((r) => r.type === 'meeting')?.bucket).toBe('normal')
+    expect(rules).toHaveLength(PERIOD_TYPES.length)
+  })
+
+  it('backfills only newly-added period types without touching existing rows', () => {
+    const db = createTestDb()
+    periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
+    periodTypeRulesRepo.setPeriodTypeRuleBucket(db, 'class', 'excluded')
+
+    // Simulate a type that predates a migration by deleting one row, then
+    // confirm re-seeding restores just that row at its default — and still
+    // leaves the customized 'class' row alone.
+    db.delete(schema.periodTypeRules).where(eq(schema.periodTypeRules.type, 'lunch')).run()
+    const rules = periodTypeRulesRepo.ensureDefaultPeriodTypeRules(db)
+    expect(rules.find((r) => r.type === 'lunch')?.bucket).toBe('ignored')
+    expect(rules.find((r) => r.type === 'class')?.bucket).toBe('excluded')
   })
 })
 
