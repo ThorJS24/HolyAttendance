@@ -24,6 +24,7 @@ import { WEEKDAYS, PERIOD_TYPES, type Weekday, type PeriodType, type PeriodTime 
 import type { TimetableSlot } from '../../electron/db/repositories/timetable-slots'
 import { validateTimetableDay } from '@/lib/timetable-rules'
 import { allocateEvenPeriodTimes } from '@/lib/period-time-allocation'
+import { planDragDrop } from '@/lib/timetable-drag'
 import { cn } from '@/lib/utils'
 
 const DAY_LABELS: Record<Weekday, string> = {
@@ -183,6 +184,58 @@ export function TimetablePage() {
     } finally {
       setCopying(false)
     }
+  }
+
+  // --- Drag-to-reschedule ---------------------------------------------
+  //
+  // Dropping on an EMPTY slot moves the dragged period there. Dropping on
+  // an OCCUPIED slot SWAPS the two periods' content — chosen over blocking
+  // because the obvious intent of dragging one period onto another is "put
+  // these two where the other one was", and forcing a clear-then-place
+  // round trip through the dialog for that is exactly the friction
+  // drag-and-drop is meant to remove. The actual move/swap decision,
+  // validation (teaching-period cap + single-lunch-per-day, via the same
+  // validateTimetableDay used everywhere else), and resulting updates are
+  // computed by the pure, unit-tested planDragDrop() — see
+  // src/lib/timetable-drag.ts for exactly why a swap is safe to apply as
+  // two independent updates, and why periodTimes need no special handling
+  // here (they're keyed by period number, not by slot).
+  const [draggedFrom, setDraggedFrom] = useState<{ day: Weekday; period: number } | null>(null)
+  const [dragOverCell, setDragOverCell] = useState<{ day: Weekday; period: number } | null>(null)
+
+  async function handleDrop(targetDay: Weekday, targetPeriod: number) {
+    const from = draggedFrom
+    setDraggedFrom(null)
+    setDragOverCell(null)
+    if (!from) return
+    if (from.day === targetDay && from.period === targetPeriod) return
+
+    const plan = planDragDrop({
+      slots,
+      from,
+      to: { day: targetDay, period: targetPeriod },
+      maxTeachingPeriods: periodsPerDay,
+    })
+    if (!plan.ok) {
+      pushToast({ title: "Can't reschedule there", description: plan.reason })
+      return
+    }
+
+    for (const u of plan.updates) {
+      const { id, ...patch } = u
+      await update(id, patch)
+    }
+
+    // planDragDrop returns one update for a move (only the dragged row
+    // changes) and two for a swap (both rows trade content) — that count
+    // is a reliable, self-contained way to tell the toast which happened.
+    const isSwap = plan.updates.length === 2
+    pushToast({
+      title: isSwap ? 'Periods swapped' : 'Period moved',
+      description: isSwap
+        ? `${DAY_LABELS[from.day]} · P${from.period} ↔ ${DAY_LABELS[targetDay]} · P${targetPeriod}`
+        : `${DAY_LABELS[from.day]} · P${from.period} → ${DAY_LABELS[targetDay]} · P${targetPeriod}`,
+    })
   }
 
   const slotAt = useMemo(() => {
@@ -375,14 +428,42 @@ export function TimetablePage() {
                 {WEEKDAYS.map((day) => {
                   const slot = slotAt.get(`${day}:${period}`)
                   const subjectName = slot?.subjectId ? subjectsById.get(slot.subjectId)?.name : undefined
+                  const isDragSource = draggedFrom?.day === day && draggedFrom.period === period
+                  const isDragOver = dragOverCell?.day === day && dragOverCell.period === period
                   return (
                     <td key={day} className="p-1 align-top">
                       <button
                         type="button"
                         onClick={() => openCell(day, period)}
+                        draggable={!!slot}
+                        onDragStart={(e) => {
+                          setDraggedFrom({ day, period })
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        onDragEnd={() => {
+                          setDraggedFrom(null)
+                          setDragOverCell(null)
+                        }}
+                        onDragOver={(e) => {
+                          if (!draggedFrom) return
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                        }}
+                        onDragEnter={() => {
+                          if (draggedFrom) setDragOverCell({ day, period })
+                        }}
+                        onDragLeave={() => {
+                          setDragOverCell((prev) => (prev?.day === day && prev.period === period ? null : prev))
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          void handleDrop(day, period)
+                        }}
                         className={cn(
                           'flex h-16 w-full flex-col items-start justify-center gap-1 rounded-md border border-dashed p-2 text-left transition-colors hover:bg-accent',
-                          slot && 'border-solid bg-card',
+                          slot && 'cursor-grab border-solid bg-card active:cursor-grabbing',
+                          isDragSource && 'opacity-40',
+                          isDragOver && 'ring-2 ring-primary ring-offset-1',
                         )}
                       >
                         {slot ? (
