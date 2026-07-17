@@ -53,6 +53,12 @@ const TYPE_VARIANT: Record<PeriodType, 'default' | 'secondary' | 'outline' | 'su
 // only controls what's offered for NEW selections.
 const SELECTABLE_PERIOD_TYPES = PERIOD_TYPES.filter((t) => t !== 'project')
 
+// class is the only type that's actually about a subject. lunch, meeting,
+// mentoring, and minor are all genuinely typeless — no subject to attach —
+// and project (retired, kept only for legacy slots) was typeless too before
+// project work moved to being scheduled as a real Subject.
+const TYPES_WITHOUT_SUBJECT: PeriodType[] = ['lunch', 'meeting', 'mentoring', 'minor', 'project']
+
 interface CellFormState {
   subjectId: string
   type: PeriodType
@@ -304,7 +310,7 @@ export function TimetablePage() {
   // readout instead of asking for the same time twice.
   const dialogAutoTime = dialogTarget ? periodTimeByPeriod.get(dialogTarget.period) : undefined
 
-  const subjectRequired = form.type !== 'lunch'
+  const subjectRequired = !TYPES_WITHOUT_SUBJECT.includes(form.type)
   const subjectMissing = subjectRequired && form.subjectId === 'none'
 
   async function handleSubmit(e: React.FormEvent) {
@@ -572,8 +578,7 @@ export function TimetablePage() {
               </Select>
               {subjectMissing && (
                 <p className="text-xs text-destructive">
-                  A subject is required so attendance can be marked for this period — only lunch can be left
-                  unassigned.
+                  A subject is required so attendance can be marked for this period.
                 </p>
               )}
             </div>
