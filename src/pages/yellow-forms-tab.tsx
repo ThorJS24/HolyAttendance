@@ -18,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
+import { YellowFormDisputeBadge } from '@/components/yellow-form-dispute'
 import type { YellowForm } from '../../electron/db/repositories/yellow-forms'
 import { todayIso } from '@/lib/date-utils'
 
@@ -122,13 +123,14 @@ export function YellowFormsTab() {
                 <TableHead>Period</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Dispute</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sorted.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     No yellow forms on record.
                   </TableCell>
                 </TableRow>
@@ -141,6 +143,13 @@ export function YellowFormsTab() {
                   <TableCell className="text-muted-foreground">{f.reason ?? '—'}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[f.status]}>{f.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {f.disputeStatus === 'none' && f.status === 'pending' ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <YellowFormDisputeBadge form={f} subjectName={subjectsById.get(f.subjectId)?.name ?? `#${f.subjectId}`} />
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
@@ -263,6 +272,7 @@ export function YellowFormsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

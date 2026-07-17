@@ -3,7 +3,9 @@ import type {
   YellowForm,
   NewYellowForm,
   YellowFormUpdate,
+  YellowFormDispute,
 } from '../../electron/db/repositories/yellow-forms'
+import type { YellowFormDisputeOutcome } from '@/db/schema'
 
 interface YellowFormsState {
   forms: YellowForm[]
@@ -13,6 +15,9 @@ interface YellowFormsState {
   update: (id: number, input: YellowFormUpdate) => Promise<YellowForm>
   setStatus: (id: number, status: YellowForm['status']) => Promise<YellowForm>
   remove: (id: number) => Promise<void>
+  getDispute: (yellowFormId: number) => Promise<YellowFormDispute | undefined>
+  fileDispute: (yellowFormId: number, note: string) => Promise<YellowForm>
+  resolveDispute: (yellowFormId: number, outcome: YellowFormDisputeOutcome) => Promise<YellowForm>
 }
 
 export const useYellowFormsStore = create<YellowFormsState>((set, get) => ({
@@ -46,5 +51,19 @@ export const useYellowFormsStore = create<YellowFormsState>((set, get) => ({
   remove: async (id) => {
     await window.bunkmate.yellowForms.delete(id)
     set({ forms: get().forms.filter((f) => f.id !== id) })
+  },
+
+  getDispute: (yellowFormId) => window.bunkmate.yellowForms.getDispute(yellowFormId),
+
+  fileDispute: async (yellowFormId, note) => {
+    const updated = await window.bunkmate.yellowForms.fileDispute(yellowFormId, note)
+    set({ forms: get().forms.map((f) => (f.id === yellowFormId ? updated : f)) })
+    return updated
+  },
+
+  resolveDispute: async (yellowFormId, outcome) => {
+    const updated = await window.bunkmate.yellowForms.resolveDispute(yellowFormId, outcome)
+    set({ forms: get().forms.map((f) => (f.id === yellowFormId ? updated : f)) })
+    return updated
   },
 }))

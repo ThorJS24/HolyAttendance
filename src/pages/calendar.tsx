@@ -28,6 +28,7 @@ import { resolveDayPeriods, buildPeriodEndMinutesForDay, minutesSinceMidnight } 
 import { todayIso } from '@/lib/date-utils'
 import { HolidaysTab } from '@/pages/holidays-tab'
 import { YellowFormsTab } from '@/pages/yellow-forms-tab'
+import { YellowFormDisputeBadge } from '@/components/yellow-form-dispute'
 import { cn } from '@/lib/utils'
 
 const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -396,6 +397,9 @@ function CalendarGrid() {
                         >
                           Yellow form: {yellowForm.status}
                         </Badge>
+                      )}
+                      {yellowForm && yellowForm.status !== 'pending' && (
+                        <YellowFormDisputeBadge form={yellowForm} subjectName={subjectName ?? slot.type} />
                       )}
                     </span>
                     {!isLunch && slot.subjectId !== null && (
