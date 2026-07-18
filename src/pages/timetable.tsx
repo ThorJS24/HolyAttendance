@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2, TriangleAlert, CopyPlus, CalendarRange, Table2 } from 'lucide-react'
+import { Trash2, Settings2, TriangleAlert, CopyPlus, CalendarRange, Table2, Import, Eraser } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +25,7 @@ import type { TimetableSlot } from '../../electron/db/repositories/timetable-slo
 import { validateTimetableDay } from '@/lib/timetable-rules'
 import { allocateEvenPeriodTimes } from '@/lib/period-time-allocation'
 import { planDragDrop } from '@/lib/timetable-drag'
+import { planTimetableCopy } from '@/lib/timetable-copy'
 import { TimetableWeekGlance } from '@/components/timetable-week-glance'
 import { cn } from '@/lib/utils'
 
@@ -95,6 +96,10 @@ export function TimetablePage() {
   const [copyTargetDays, setCopyTargetDays] = useState<Partial<Record<Weekday, boolean>>>({})
   const [copying, setCopying] = useState(false)
   const [view, setView] = useState<'grid' | 'week'>('grid')
+  const [copyFromOpen, setCopyFromOpen] = useState(false)
+  const [copyFromSemesterLabel, setCopyFromSemesterLabel] = useState('')
+  const [copyingFrom, setCopyingFrom] = useState(false)
+  const [clearDayTarget, setClearDayTarget] = useState<Weekday | null>(null)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -192,6 +197,69 @@ export function TimetablePage() {
     } finally {
       setCopying(false)
     }
+  }
+
+  // Semesters other than the current one, as copy sources.
+  const otherSemesters = useMemo(
+    () => semesters.filter((s) => s.label !== semester).sort((a, b) => a.number - b.number),
+    [semesters, semester],
+  )
+
+  async function copyFromSemester() {
+    if (!copyFromSemesterLabel) return
+    setCopyingFrom(true)
+    try {
+      const sourceSlots = await window.bunkmate.timetableSlots.list({ semester: copyFromSemesterLabel })
+      const plan = planTimetableCopy({
+        sourceSlots: sourceSlots.map((s) => ({
+          day: s.day,
+          period: s.period,
+          type: s.type,
+          subjectId: s.subjectId,
+          startTime: s.startTime,
+          endTime: s.endTime,
+        })),
+        sourceSubjectNames: new Map(
+          subjects.filter((s) => s.semester === copyFromSemesterLabel).map((s) => [s.id, s.name]),
+        ),
+        targetSubjectIdsByName: new Map(
+          subjects.filter((s) => s.semester === semester).map((s) => [s.name, s.id]),
+        ),
+        occupiedTargetCells: new Set(slots.map((s) => `${s.day}:${s.period}`)),
+        maxPeriod: periodsPerDay,
+      })
+
+      for (const s of plan.toCreate) {
+        await create({ semester, ...s })
+      }
+
+      if (plan.toCreate.length === 0) {
+        pushToast({ title: 'Nothing to copy', description: 'Every matching cell is already filled.' })
+      } else {
+        pushToast({
+          title: `Copied ${plan.toCreate.length} period${plan.toCreate.length === 1 ? '' : 's'} from ${copyFromSemesterLabel}`,
+          description:
+            (plan.skipped > 0 ? `${plan.skipped} skipped (occupied or out of range). ` : '') +
+            (plan.unmatchedSubjects.length > 0
+              ? `No subject match for: ${plan.unmatchedSubjects.join(', ')} — reassign them.`
+              : ''),
+        })
+      }
+      setCopyFromOpen(false)
+      setCopyFromSemesterLabel('')
+    } finally {
+      setCopyingFrom(false)
+    }
+  }
+
+  async function clearDay(day: Weekday) {
+    const daySlots = slots.filter((s) => s.day === day)
+    for (const s of daySlots) await remove(s.id)
+    setClearDayTarget(null)
+    pushToast({
+      title: `Cleared ${DAY_LABELS[day]}`,
+      description: `${daySlots.length} period${daySlots.length === 1 ? '' : 's'} removed`,
+    })
   }
 
   // --- Drag-to-reschedule ---------------------------------------------
@@ -411,6 +479,18 @@ export function TimetablePage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  setCopyFromSemesterLabel('')
+                  setCopyFromOpen(true)
+                }}
+                disabled={!activeSemester || otherSemesters.length === 0}
+                title="Copy an entire timetable from another semester into the empty cells here"
+              >
+                <Import /> Copy from…
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
                   setCopySourceDay('mon')
                   setCopyTargetDays({})
                   setCopyDayOpen(true)
@@ -457,11 +537,27 @@ export function TimetablePage() {
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="w-20 p-2 text-left font-medium text-muted-foreground">Period</th>
-              {WEEKDAYS.map((day) => (
-                <th key={day} className="p-2 text-left font-medium text-muted-foreground">
-                  {DAY_LABELS[day]}
-                </th>
-              ))}
+              {WEEKDAYS.map((day) => {
+                const dayHasSlots = slots.some((s) => s.day === day)
+                return (
+                  <th key={day} className="p-2 text-left font-medium text-muted-foreground">
+                    <span className="group flex items-center gap-1">
+                      {DAY_LABELS[day]}
+                      {dayHasSlots && (
+                        <button
+                          type="button"
+                          onClick={() => setClearDayTarget(day)}
+                          title={`Clear all of ${DAY_LABELS[day]}`}
+                          aria-label={`Clear all of ${DAY_LABELS[day]}`}
+                          className="text-muted-foreground/50 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                        >
+                          <Eraser className="size-3.5" />
+                        </button>
+                      )}
+                    </span>
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
@@ -824,6 +920,61 @@ export function TimetablePage() {
               onClick={copyDay}
             >
               Copy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={copyFromOpen} onOpenChange={setCopyFromOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copy timetable from another semester</DialogTitle>
+            <DialogDescription>
+              Fills only the empty cells in {semester} — nothing already set here is touched. Subjects are matched
+              by name; any without a match in {semester} are copied as structure for you to reassign.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="copy-from-semester">Source semester</Label>
+            <Select value={copyFromSemesterLabel} onValueChange={setCopyFromSemesterLabel}>
+              <SelectTrigger id="copy-from-semester">
+                <SelectValue placeholder="Choose a semester…" />
+              </SelectTrigger>
+              <SelectContent>
+                {otherSemesters.map((s) => (
+                  <SelectItem key={s.id} value={s.label}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyFromOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={!copyFromSemesterLabel || copyingFrom} onClick={copyFromSemester}>
+              Copy into {semester}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={clearDayTarget !== null} onOpenChange={(open) => !open && setClearDayTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear {clearDayTarget && DAY_LABELS[clearDayTarget]}?</DialogTitle>
+            <DialogDescription>
+              Removes every period on {clearDayTarget && DAY_LABELS[clearDayTarget]} for {semester}. Attendance
+              records already logged aren't affected — this only clears the schedule. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDayTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => clearDayTarget && clearDay(clearDayTarget)}>
+              Clear day
             </Button>
           </DialogFooter>
         </DialogContent>
