@@ -23,6 +23,7 @@ import { useHolidaysStore } from '@/store/holidays-store'
 import { useLeavePlansStore } from '@/store/leave-plans-store'
 import { useExamsStore } from '@/store/exams-store'
 import { useDayMarking } from '@/hooks/use-day-marking'
+import { NON_ATTENDANCE_TYPES } from '@/lib/period-marking'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
 import { jsDayToWeekday, enumerateScheduledPeriods } from '@/lib/attendance-engine'
@@ -34,16 +35,6 @@ import { YellowFormDisputeBadge } from '@/components/yellow-form-dispute'
 import { cn } from '@/lib/utils'
 
 const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-// Period types that never carry attendance, so "Mark all" skips them:
-// meeting is the 'excluded' bucket and lunch the 'ignored' one (see
-// period-type-rules). Every other type — class, mentoring, minor, project —
-// folds into a counted bucket and is markable, exactly like the per-period
-// Present/Absent buttons. Deliberately NOT reusing timetable-rules'
-// DEFAULT_NON_TEACHING_TYPES: it holds the same two values today but answers
-// a different question ("does this count toward the teaching-hours cap"),
-// and coupling the two would let a change to one silently move the other.
-const NON_ATTENDANCE_TYPES: readonly string[] = ['meeting', 'lunch']
 
 function pad(n: number): string {
   return String(n).padStart(2, '0')

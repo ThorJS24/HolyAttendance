@@ -10,7 +10,9 @@ export type PeriodTypeRule = typeof periodTypeRules.$inferSelect
 const DEFAULT_BUCKETS: Record<PeriodType, PeriodTypeRule['bucket']> = {
   class: 'normal',
   project: 'project',
-  mentoring: 'project',
+  // mentoring hours don't count toward attendance (user preference) — treated
+  // like meetings. Existing installs are migrated by 0014_*.
+  mentoring: 'excluded',
   minor: 'project',
   meeting: 'excluded',
   lunch: 'ignored',

@@ -466,7 +466,9 @@ describe('period type rules repository', () => {
     const byType = new Map(seeded.map((r) => [r.type, r.bucket]))
     expect(byType.get('class')).toBe('normal')
     expect(byType.get('project')).toBe('project')
-    expect(byType.get('mentoring')).toBe('project')
+    // Mentoring hours don't count toward attendance (user preference) — treated
+    // like meetings, so its default bucket is 'excluded'.
+    expect(byType.get('mentoring')).toBe('excluded')
     expect(byType.get('minor')).toBe('project')
     expect(byType.get('meeting')).toBe('excluded')
     expect(byType.get('lunch')).toBe('ignored')

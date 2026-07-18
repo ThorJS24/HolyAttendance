@@ -18,10 +18,9 @@ import { useDayMarking } from '@/hooks/use-day-marking'
 import { jsDayToWeekday } from '@/lib/attendance-engine'
 import { resolveDayPeriods, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
 import { todayIso } from '@/lib/date-utils'
+import { NON_ATTENDANCE_TYPES } from '@/lib/period-marking'
 import { cn } from '@/lib/utils'
 
-// lunch/meeting are not attendance-markable here — same rule as the Calendar.
-const NON_ATTENDANCE_TYPES = ['lunch', 'meeting']
 
 export function TodayPage() {
   const currentSemester = useSettingsStore((s) => s.currentSemester)
