@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,16 @@ const STATUS_VARIANT = {
   rejected: 'destructive',
 } as const
 
+function formatDateLabel(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 export function YellowFormsTab() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const { forms, load, create, update, setStatus, remove } = useYellowFormsStore()
@@ -57,7 +67,22 @@ export function YellowFormsTab() {
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
 
-  const sorted = useMemo(() => [...forms].sort((a, b) => (a.date < b.date ? 1 : -1)), [forms])
+  // Grouped by date (newest first) so you can cross-verify a whole day's forms
+  // against the portal at a glance; within a day, ordered by period.
+  const groups = useMemo(() => {
+    const byDate = new Map<string, YellowForm[]>()
+    for (const f of forms) {
+      const list = byDate.get(f.date)
+      if (list) list.push(f)
+      else byDate.set(f.date, [f])
+    }
+    return [...byDate.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([date, list]) => ({
+        date,
+        forms: [...list].sort((a, b) => (a.period ?? 0) - (b.period ?? 0)),
+      }))
+  }, [forms])
 
   function openCreate() {
     setEditing(null)
@@ -118,7 +143,6 @@ export function YellowFormsTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Reason</TableHead>
@@ -128,16 +152,25 @@ export function YellowFormsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.length === 0 && (
+              {groups.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     No yellow forms on record.
                   </TableCell>
                 </TableRow>
               )}
-              {sorted.map((f) => (
+              {groups.map((group) => (
+                <Fragment key={group.date}>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableCell colSpan={6} className="py-2 font-medium">
+                      {formatDateLabel(group.date)}
+                      <Badge variant="secondary" className="ml-2 font-normal">
+                        {group.forms.length} form{group.forms.length === 1 ? '' : 's'}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                  {group.forms.map((f) => (
                 <TableRow key={f.id}>
-                  <TableCell>{f.date}</TableCell>
                   <TableCell>{subjectsById.get(f.subjectId)?.name ?? `#${f.subjectId}`}</TableCell>
                   <TableCell>{f.period ?? 'whole day'}</TableCell>
                   <TableCell className="text-muted-foreground">{f.reason ?? '—'}</TableCell>
@@ -182,6 +215,8 @@ export function YellowFormsTab() {
                     </div>
                   </TableCell>
                 </TableRow>
+                  ))}
+                </Fragment>
               ))}
             </TableBody>
           </Table>
