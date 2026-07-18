@@ -145,7 +145,7 @@ export function registerIpcHandlers(db: AppDatabase): void {
     },
   )
 
-  ipcMain.handle(IPC_CHANNELS.filesOpenPdfText, async () => {
+  ipcMain.handle(IPC_CHANNELS.filesOpenPdfText, async (event) => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -154,7 +154,10 @@ export function registerIpcHandlers(db: AppDatabase): void {
     const filePath = result.filePaths[0]
     // Hall tickets are print-to-PDF with a non-extractable Type3 text layer, so
     // we OCR the rendered page rather than read the (scrambled) text stream.
-    const text = await extractHallTicketText(new Uint8Array(fs.readFileSync(filePath)))
+    // OCR takes a few seconds, so stream progress back to the caller's window.
+    const text = await extractHallTicketText(new Uint8Array(fs.readFileSync(filePath)), (p) => {
+      if (!event.sender.isDestroyed()) event.sender.send(IPC_CHANNELS.filesPdfProgress, p)
+    })
     return { name: filePath.split(/[\\/]/).pop() ?? filePath, text }
   })
 

@@ -89,6 +89,13 @@ const api: BunkMateApi = {
     saveFile: (opts) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveFile, opts),
     openTextFile: (opts) => ipcRenderer.invoke(IPC_CHANNELS.filesOpenTextFile, opts),
     openPdfText: () => ipcRenderer.invoke(IPC_CHANNELS.filesOpenPdfText),
+    onPdfProgress: (cb) => {
+      const listener = (_e: unknown, p: Parameters<typeof cb>[0]) => cb(p)
+      ipcRenderer.on(IPC_CHANNELS.filesPdfProgress, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.filesPdfProgress, listener)
+      }
+    },
   },
 
   espro: {

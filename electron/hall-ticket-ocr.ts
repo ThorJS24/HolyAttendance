@@ -18,6 +18,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { createCanvas, Path2D, DOMMatrix, ImageData } from '@napi-rs/canvas'
 import type { Worker } from 'tesseract.js'
+import type { PdfOcrProgress } from './ipc/contract'
 
 // Loaded lazily (not at startup) so tesseract.js — which spawns a worker_thread
 // and loads a WASM core the first time it's used — costs nothing until an
@@ -143,7 +144,7 @@ function tessdataDir(): string {
     : path.join(__dirname, '..', 'resources', 'tessdata')
 }
 
-async function makeWorker(): Promise<Worker> {
+async function makeWorker(onTessProgress?: (status: string, progress: number) => void): Promise<Worker> {
   const dir = tessdataDir()
   // Fail loudly if the offline data is missing rather than letting tesseract.js
   // silently try (and hang on) a CDN fetch.
@@ -159,6 +160,9 @@ async function makeWorker(): Promise<Worker> {
     gzip: false,
     legacyCore: false,
     legacyLang: false,
+    logger: (m: { status?: string; progress?: number }) => {
+      if (onTessProgress && typeof m.progress === 'number') onTessProgress(m.status ?? '', m.progress)
+    },
   } as never)
   // PSM 4 = single column of variable-size text — reads the exam table rows.
   await worker.setParameters({ tessedit_pageseg_mode: tess.PSM.SINGLE_COLUMN })
@@ -169,7 +173,14 @@ async function makeWorker(): Promise<Worker> {
  * Rasterizes a hall-ticket PDF and OCRs it into plain text (one row per line),
  * the shape parseHallTicket consumes. OCRs at most the first few pages.
  */
-export async function extractHallTicketText(pdfBytes: Uint8Array): Promise<string> {
+export async function extractHallTicketText(
+  pdfBytes: Uint8Array,
+  onProgress?: (p: PdfOcrProgress) => void,
+): Promise<string> {
+  const emit = (stage: PdfOcrProgress['stage'], progress: number, detail: string) =>
+    onProgress?.({ stage, progress: Math.max(0, Math.min(1, progress)), detail })
+
+  emit('loading', 0.02, 'Opening the PDF…')
   const pdfjs = await loadPdfjs()
   const factory = new NodeCanvasFactory()
   // canvasFactory is a valid runtime option but missing from the .d.ts type.
@@ -177,16 +188,30 @@ export async function extractHallTicketText(pdfBytes: Uint8Array): Promise<strin
     typeof pdfjs.getDocument
   >[0])
   const doc = await loadingTask.promise
-  const worker = await makeWorker()
+  const pageCount = Math.min(doc.numPages, 3)
+  emit('loading', 0.08, `Preparing ${pageCount} page${pageCount === 1 ? '' : 's'}…`)
+
+  // Progress is split: 8% opening, then an equal slice per page (render, then
+  // OCR — OCR is the slow part so it gets most of each slice).
+  const pageSpan = 0.9 / pageCount
+  let currentPage = 1
+  const worker = await makeWorker((status, progress) => {
+    if (!/recogniz/i.test(status)) return
+    const base = 0.08 + (currentPage - 1) * pageSpan
+    emit('recognizing', base + progress * pageSpan * 0.85, `Reading page ${currentPage} of ${pageCount}…`)
+  })
+
   try {
     const pages: string[] = []
-    const pageCount = Math.min(doc.numPages, 3)
     for (let p = 1; p <= pageCount; p++) {
+      currentPage = p
+      emit('rendering', 0.08 + (p - 1) * pageSpan, `Rendering page ${p} of ${pageCount}…`)
       const page = (await doc.getPage(p)) as unknown as PdfPage
       const png = await renderCleanedPng(page, factory)
       const { data } = await worker.recognize(png)
       pages.push(data.text)
     }
+    emit('done', 1, 'Finishing up…')
     return pages.join('\n')
   } finally {
     await worker.terminate()

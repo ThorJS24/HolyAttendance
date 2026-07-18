@@ -11,6 +11,15 @@ import type {
 } from '../db/repositories/semesters'
 import type { Subject, NewSubject, SubjectUpdate } from '../db/repositories/subjects'
 import type { EsproStatus, EsproSaveResult } from '../espro/types'
+
+/** Streamed while a hall-ticket PDF is being rasterized and OCR'd. */
+export interface PdfOcrProgress {
+  stage: 'loading' | 'rendering' | 'recognizing' | 'done'
+  /** Overall completion, 0..1. */
+  progress: number
+  /** Human-readable status, e.g. "Reading page 1 of 2". */
+  detail: string
+}
 import type {
   TimetableSlot,
   NewTimetableSlot,
@@ -95,6 +104,7 @@ export const IPC_CHANNELS = {
   filesSaveFile: 'files:saveFile',
   filesOpenTextFile: 'files:openTextFile',
   filesOpenPdfText: 'files:openPdfText',
+  filesPdfProgress: 'files:pdfProgress',
 
   backupNow: 'backup:now',
   backupRestore: 'backup:restore',
@@ -207,6 +217,11 @@ export interface BunkMateApi {
      * throws if the file can't be read as a PDF.
      */
     openPdfText: () => Promise<{ name: string; text: string } | null>
+    /**
+     * Subscribes to OCR progress for the in-flight openPdfText call so the UI
+     * can show a real progress bar. Returns an unsubscribe function.
+     */
+    onPdfProgress: (cb: (p: PdfOcrProgress) => void) => () => void
   }
 
   backup: {

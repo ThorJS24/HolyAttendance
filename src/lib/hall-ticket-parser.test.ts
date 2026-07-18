@@ -96,4 +96,59 @@ Wed 10/04/2024 at 03:59:22 PM IST`
     // portal URL header and IST footer are not exams
     expect(rows.some((r) => r.date === '2024-04-10')).toBe(false)
   })
+
+  it('captures course code, both times, and the venue', () => {
+    const line = 'MA231 MATHEMATICS - II 15/04/2024 09:15 AM 09:30 BLOCK II Floor:FIRST -'
+    const [row] = parseHallTicket(line, [])
+    expect(row.courseCode).toBe('MA231')
+    // hall-ticket column order: reporting time, then exam time
+    expect(row.reportingTime).toBe('09:15')
+    expect(row.startTime).toBe('09:30')
+    expect(row.location).toMatch(/BLOCK II/)
+    expect(row.location).toMatch(/Floor:FIRST/)
+  })
+
+  it('converts PM times to 24h', () => {
+    const [row] = parseHallTicket('CS101 SOMETHING 17/12/2026 01:30 PM 02:00 PM Room:A1', [])
+    expect(row.reportingTime).toBe('13:30')
+    expect(row.startTime).toBe('14:00')
+  })
+
+  it('leaves a time null rather than guessing when OCR only caught one', () => {
+    const [row] = parseHallTicket('PH232P PHYSICS FOR ENGINEERS 17/04/2024 09:15 AM Room:K224', [])
+    expect(row.reportingTime).toBe('09:15')
+    expect(row.startTime).toBeNull()
+  })
+
+  it('stitches a venue that OCR wrapped onto the next line', () => {
+    const wrapped = `MA231 MATHEMATICS - II 15/04/2024 09:15 AM 09:30 BLOCK II- Floor:FIRST -
+Room:K224`
+    const [row] = parseHallTicket(wrapped, [])
+    expect(row.location).toMatch(/BLOCK II/)
+    expect(row.location).toMatch(/Room:K224/)
+  })
+
+  // The scanned page has loose venue fragments floating between rows; without a
+  // cap they all got glued onto one row's location.
+  it('stitches at most one wrapped venue line and never duplicates', () => {
+    const noisy = `MA231 MATHEMATICS - II 15/04/2024 09:15 AM 09:30 BLOCK II Floor:FIRST
+Room:K224
+BLOCK II- Floor:FIRST
+BLOCK II- Floor:FIRST`
+    const [row] = parseHallTicket(noisy, [])
+    expect(row.location).toBe('BLOCK II Floor:FIRST Room:K224')
+  })
+
+  it('rejects OCR garbage as a location instead of storing it', () => {
+    const [row] = parseHallTicket('BS236 BIOLOGY FOR ENGINEERS 24/04/2024 09:15 AM © uF Loa', [])
+    expect(row.location).toBeNull()
+    expect(row.date).toBe('2024-04-24') // the row itself still imports fine
+  })
+
+  it("does not absorb the instructions paragraph (which mentions 'Hall') as a venue", () => {
+    const withInstructions = `BS236 BIOLOGY FOR ENGINEERS 24/04/2024 09:15 AM 09:30 Room:K224
+1. Report to the Examination Hall before the reporting time given in the hall ticket.`
+    const [row] = parseHallTicket(withInstructions, [])
+    expect(row.location).toBe('Room:K224')
+  })
 })

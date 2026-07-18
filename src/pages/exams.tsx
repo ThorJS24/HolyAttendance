@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SemesterSwitcher } from '@/components/semester-switcher'
 import { useExamsStore } from '@/store/exams-store'
 import { useSubjectsStore } from '@/store/subjects-store'
@@ -24,18 +25,37 @@ import { useToastStore } from '@/store/toast-store'
 import { countdownLabel, daysUntil, todayIso } from '@/lib/date-utils'
 import { parseHallTicket } from '@/lib/hall-ticket-parser'
 import type { Exam } from '../../electron/db/repositories/exams'
+import type { PdfOcrProgress } from '../../electron/ipc/contract'
 
 const NO_SUBJECT = 'none'
+// Shown as the heading for exams with no examGroup set; always sorted last.
+const UNGROUPED = 'Ungrouped'
+const GROUP_SUGGESTIONS = ['Mid Semester', 'End Semester', 'CIA I', 'CIA II', 'Practical']
 
 interface ExamFormState {
   name: string
   subjectId: string
   date: string
+  startTime: string
+  reportingTime: string
+  courseCode: string
+  location: string
+  examGroup: string
   notes: string
 }
 
 function emptyForm(): ExamFormState {
-  return { name: '', subjectId: NO_SUBJECT, date: todayIso(), notes: '' }
+  return {
+    name: '',
+    subjectId: NO_SUBJECT,
+    date: todayIso(),
+    startTime: '',
+    reportingTime: '',
+    courseCode: '',
+    location: '',
+    examGroup: '',
+    notes: '',
+  }
 }
 
 // A single editable row in the hall-ticket import draft.
@@ -44,6 +64,16 @@ interface DraftRow {
   name: string
   subjectId: string
   date: string
+  startTime: string
+  reportingTime: string
+  courseCode: string
+  location: string
+}
+
+function formatTimeCell(exam: Exam): string {
+  if (!exam.startTime && !exam.reportingTime) return '—'
+  if (exam.startTime && exam.reportingTime) return `${exam.startTime} (report ${exam.reportingTime})`
+  return exam.startTime ?? `report ${exam.reportingTime}`
 }
 
 export function ExamsPage() {
@@ -58,29 +88,63 @@ export function ExamsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Exam | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [importing, setImporting] = useState(false)
   const [draftOpen, setDraftOpen] = useState(false)
   const [draftRows, setDraftRows] = useState<DraftRow[]>([])
-  const [draftSource, setDraftSource] = useState<string>('')
+  const [draftSource, setDraftSource] = useState('')
+  const [draftGroup, setDraftGroup] = useState('')
+  // Non-null while a hall ticket is being OCR'd — drives the progress dialog.
+  const [progress, setProgress] = useState<PdfOcrProgress | null>(null)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
   }, [loadSubjects])
 
+  // Every semester, so the page can nest semester > exam group > exams.
   useEffect(() => {
-    if (semester) load({ semester })
-  }, [load, semester])
+    load()
+  }, [load])
 
-  const semesterSubjects = useMemo(
-    () => subjects.filter((s) => s.semester === semester),
-    [subjects, semester],
-  )
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
+  const semesterSubjects = useMemo(() => subjects.filter((s) => s.semester === semester), [subjects, semester])
 
-  const visibleExams = useMemo(
-    () => [...exams].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
-    [exams],
-  )
+  // semester (newest first) -> exam group (Ungrouped last) -> exams (by date).
+  const grouped = useMemo(() => {
+    const bySemester = new Map<string, Map<string, Exam[]>>()
+    for (const exam of exams) {
+      const sem = exam.semester?.trim() || 'Unassigned'
+      const group = exam.examGroup?.trim() || UNGROUPED
+      let groups = bySemester.get(sem)
+      if (!groups) {
+        groups = new Map()
+        bySemester.set(sem, groups)
+      }
+      const list = groups.get(group)
+      if (list) list.push(exam)
+      else groups.set(group, [exam])
+    }
+    return [...bySemester.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([sem, groups]) => ({
+        semester: sem,
+        total: [...groups.values()].reduce((n, list) => n + list.length, 0),
+        groups: [...groups.entries()]
+          .sort((a, b) => {
+            if (a[0] === UNGROUPED) return 1
+            if (b[0] === UNGROUPED) return -1
+            return a[0].localeCompare(b[0])
+          })
+          .map(([name, list]) => ({
+            name,
+            exams: [...list].sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0)),
+          })),
+      }))
+  }, [exams])
+
+  const groupSuggestions = useMemo(() => {
+    const set = new Set<string>(GROUP_SUGGESTIONS)
+    for (const e of exams) if (e.examGroup?.trim()) set.add(e.examGroup.trim())
+    return [...set].sort()
+  }, [exams])
 
   function openCreate() {
     setEditing(null)
@@ -94,6 +158,11 @@ export function ExamsPage() {
       name: exam.name,
       subjectId: exam.subjectId === null ? NO_SUBJECT : String(exam.subjectId),
       date: exam.date,
+      startTime: exam.startTime ?? '',
+      reportingTime: exam.reportingTime ?? '',
+      courseCode: exam.courseCode ?? '',
+      location: exam.location ?? '',
+      examGroup: exam.examGroup ?? '',
       notes: exam.notes ?? '',
     })
     setDialogOpen(true)
@@ -108,8 +177,15 @@ export function ExamsPage() {
         name: form.name.trim(),
         subjectId: form.subjectId === NO_SUBJECT ? null : Number(form.subjectId),
         date: form.date,
-        semester,
+        // Editing keeps the exam where it already lives; new ones land in the
+        // semester the switcher is on.
+        semester: editing ? editing.semester : semester,
         notes: form.notes.trim() || null,
+        courseCode: form.courseCode.trim() || null,
+        location: form.location.trim() || null,
+        startTime: form.startTime || null,
+        reportingTime: form.reportingTime || null,
+        examGroup: form.examGroup.trim() || null,
       }
       if (editing) {
         await update(editing.id, payload)
@@ -125,18 +201,20 @@ export function ExamsPage() {
   }
 
   async function handleImportPdf() {
-    setImporting(true)
+    // Subscribe before opening the picker so no progress event is missed; the
+    // dialog only appears once OCR actually starts (after the file is chosen).
+    const unsubscribe = window.bunkmate.files.onPdfProgress((p) => setProgress(p))
     try {
       const picked = await window.bunkmate.files.openPdfText()
       if (!picked) return // cancelled
       const rows = parseHallTicket(
         picked.text,
-        semesterSubjects.map((s) => ({ id: s.id, name: s.name })),
+        (semesterSubjects.length > 0 ? semesterSubjects : subjects).map((s) => ({ id: s.id, name: s.name })),
       )
       if (rows.length === 0) {
         pushToast({
           title: 'No exam dates found',
-          description: `Couldn't read any dates from ${picked.name}. Add them manually, or check it's a text PDF (not a scan).`,
+          description: `Couldn't read any exam rows from ${picked.name}. Add them manually, or try a clearer copy.`,
         })
         return
       }
@@ -146,26 +224,28 @@ export function ExamsPage() {
           name: r.name,
           subjectId: r.subjectId === null ? NO_SUBJECT : String(r.subjectId),
           date: r.date,
+          startTime: r.startTime ?? '',
+          reportingTime: r.reportingTime ?? '',
+          courseCode: r.courseCode ?? '',
+          location: r.location ?? '',
         })),
       )
       setDraftSource(picked.name)
+      setDraftGroup('')
       setDraftOpen(true)
     } catch (err) {
       pushToast({
         title: 'Could not read that PDF',
-        description: err instanceof Error ? err.message : 'The file may be encrypted or scanned (image-only).',
+        description: err instanceof Error ? err.message : 'The file may be encrypted or damaged.',
       })
     } finally {
-      setImporting(false)
+      unsubscribe()
+      setProgress(null)
     }
   }
 
   function updateDraftRow(key: string, patch: Partial<DraftRow>) {
     setDraftRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
-  }
-
-  function removeDraftRow(key: string) {
-    setDraftRows((rows) => rows.filter((r) => r.key !== key))
   }
 
   async function handleSaveDraft() {
@@ -180,11 +260,19 @@ export function ExamsPage() {
           date: r.date,
           semester,
           notes: null,
+          courseCode: r.courseCode.trim() || null,
+          location: r.location.trim() || null,
+          startTime: r.startTime || null,
+          reportingTime: r.reportingTime || null,
+          examGroup: draftGroup.trim() || null,
         })
       }
       setDraftOpen(false)
       setDraftRows([])
-      pushToast({ title: `Added ${valid.length} exam${valid.length === 1 ? '' : 's'}`, description: `From ${draftSource}` })
+      pushToast({
+        title: `Added ${valid.length} exam${valid.length === 1 ? '' : 's'}`,
+        description: draftGroup.trim() ? `${draftGroup.trim()} · from ${draftSource}` : `From ${draftSource}`,
+      })
     } finally {
       setSaving(false)
     }
@@ -207,14 +295,16 @@ export function ExamsPage() {
     )
   }
 
+  const validDraftCount = draftRows.filter((r) => r.name.trim() && r.date).length
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Exams</h1>
         <div className="flex items-center gap-3">
           <SemesterSwitcher />
-          <Button variant="outline" onClick={handleImportPdf} disabled={importing}>
-            {importing ? <Spinner className="size-4" /> : <FileUp />} Import hall ticket
+          <Button variant="outline" onClick={handleImportPdf} disabled={progress !== null}>
+            <FileUp /> Import hall ticket
           </Button>
           <Button onClick={openCreate}>
             <Plus /> Add exam
@@ -222,87 +312,295 @@ export function ExamsPage() {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Exam</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>When</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <Spinner className="mx-auto" />
-                  </TableCell>
-                </TableRow>
-              )}
-              {!loading && visibleExams.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No exams for {semester} yet.
-                  </TableCell>
-                </TableRow>
-              )}
-              {!loading &&
-                visibleExams.map((exam) => {
-                  const days = daysUntil(exam.date)
-                  return (
-                    <TableRow key={exam.id} className={days < 0 ? 'opacity-50' : undefined}>
-                      <TableCell className="font-medium">{exam.name}</TableCell>
-                      <TableCell>
-                        {exam.subjectId ? (subjectsById.get(exam.subjectId)?.name ?? '—') : 'All / common'}
-                      </TableCell>
-                      <TableCell className="tabular-nums">{exam.date}</TableCell>
-                      <TableCell>
-                        <Badge variant={days < 0 ? 'secondary' : days <= 7 ? 'warning' : 'outline'}>
-                          {countdownLabel(exam.date)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-48 truncate text-muted-foreground">{exam.notes ?? '—'}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(exam)} aria-label="Edit">
-                            <Pencil />
-                          </Button>
-                          <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(exam)} aria-label="Delete">
-                            <Trash2 />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {loading && (
+        <Card>
+          <CardContent className="py-8">
+            <Spinner className="mx-auto" />
+          </CardContent>
+        </Card>
+      )}
 
+      {!loading && grouped.length === 0 && (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No exams yet. Add one, or import your hall ticket.
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading &&
+        grouped.map((sem) => (
+          <div key={sem.semester} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">{sem.semester}</h2>
+              <Badge variant="secondary">
+                {sem.total} exam{sem.total === 1 ? '' : 's'}
+              </Badge>
+            </div>
+
+            {sem.groups.map((group) => (
+              <Card key={group.name}>
+                <CardHeader className="py-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    {group.name}
+                    <Badge variant="outline" className="font-normal">
+                      {group.exams.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Exam</TableHead>
+                        <TableHead>Subject</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>When</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.exams.map((exam) => {
+                        const days = daysUntil(exam.date)
+                        return (
+                          <TableRow key={exam.id} className={days < 0 ? 'opacity-50' : undefined}>
+                            <TableCell className="font-mono text-xs">{exam.courseCode ?? '—'}</TableCell>
+                            <TableCell className="font-medium">{exam.name}</TableCell>
+                            <TableCell>
+                              {exam.subjectId ? (subjectsById.get(exam.subjectId)?.name ?? '—') : 'All / common'}
+                            </TableCell>
+                            <TableCell className="tabular-nums">{exam.date}</TableCell>
+                            <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                              {formatTimeCell(exam)}
+                            </TableCell>
+                            <TableCell className="max-w-48 truncate text-muted-foreground">
+                              {exam.location ?? '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={days < 0 ? 'secondary' : days <= 7 ? 'warning' : 'outline'}>
+                                {countdownLabel(exam.date)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button size="icon" variant="ghost" onClick={() => openEdit(exam)} aria-label="Edit">
+                                  <Pencil />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => setDeleteTarget(exam)}
+                                  aria-label="Delete"
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ))}
+
+      {/* OCR progress — modal so the app clearly isn't stuck. */}
+      <Dialog open={progress !== null}>
+        <DialogContent
+          className="max-w-md"
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Reading your hall ticket…</DialogTitle>
+            <DialogDescription>
+              The PDF's text isn't machine-readable, so BunkMate scans the page image instead. This takes a few
+              seconds and runs entirely offline.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Progress value={(progress?.progress ?? 0) * 100} />
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{progress?.detail ?? 'Starting…'}</span>
+              <span className="tabular-nums">{Math.round((progress?.progress ?? 0) * 100)}%</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import draft */}
+      <Dialog open={draftOpen} onOpenChange={setDraftOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Review imported exams</DialogTitle>
+            <DialogDescription>
+              Read from {draftSource}. Times and venues come from OCR, so give them a quick check — edit anything,
+              remove rows you don't want, then save. Nothing is added until you do.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-wrap items-end gap-3 rounded-md border bg-muted/30 p-3">
+            <div className="space-y-1">
+              <Label htmlFor="draft-group">Group these as</Label>
+              <Input
+                id="draft-group"
+                list="exam-group-options"
+                className="w-56"
+                value={draftGroup}
+                onChange={(e) => setDraftGroup(e.target.value)}
+                placeholder="End Semester"
+              />
+            </div>
+            <p className="pb-2 text-sm text-muted-foreground">
+              Saved under <span className="font-medium">{semester}</span>
+              {draftGroup.trim() ? (
+                <>
+                  {' '}
+                  → <span className="font-medium">{draftGroup.trim()}</span>
+                </>
+              ) : (
+                ' (ungrouped)'
+              )}
+            </p>
+          </div>
+
+          <div className="max-h-[45vh] space-y-3 overflow-y-auto pr-1">
+            {draftRows.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">No rows left. Cancel to start over.</p>
+            )}
+            {draftRows.map((r) => (
+              <div key={r.key} className="space-y-2 rounded-md border p-3">
+                <div className="flex items-end gap-2">
+                  <div className="w-28 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Code</Label>
+                    <Input
+                      value={r.courseCode}
+                      onChange={(e) => updateDraftRow(r.key, { courseCode: e.target.value })}
+                      placeholder="MA231"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Exam</Label>
+                    <Input
+                      value={r.name}
+                      onChange={(e) => updateDraftRow(r.key, { name: e.target.value })}
+                      placeholder="Exam name"
+                    />
+                  </div>
+                  <div className="w-44 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Subject</Label>
+                    <Select value={r.subjectId} onValueChange={(v) => updateDraftRow(r.key, { subjectId: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_SUBJECT}>All / common</SelectItem>
+                        {(semesterSubjects.length > 0 ? semesterSubjects : subjects).map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setDraftRows((rows) => rows.filter((x) => x.key !== r.key))}
+                    aria-label="Remove row"
+                  >
+                    <X />
+                  </Button>
+                </div>
+                <div className="flex items-end gap-2">
+                  <div className="w-36 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Date</Label>
+                    <Input
+                      type="date"
+                      value={r.date}
+                      onChange={(e) => updateDraftRow(r.key, { date: e.target.value })}
+                    />
+                  </div>
+                  <div className="w-28 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Starts</Label>
+                    <Input
+                      type="time"
+                      value={r.startTime}
+                      onChange={(e) => updateDraftRow(r.key, { startTime: e.target.value })}
+                    />
+                  </div>
+                  <div className="w-28 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Report by</Label>
+                    <Input
+                      type="time"
+                      value={r.reportingTime}
+                      onChange={(e) => updateDraftRow(r.key, { reportingTime: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Location</Label>
+                    <Input
+                      value={r.location}
+                      onChange={(e) => updateDraftRow(r.key, { location: e.target.value })}
+                      placeholder="Block / room"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDraftOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveDraft} disabled={saving || validDraftCount === 0}>
+              Save {validDraftCount} exam{validDraftCount === 1 ? '' : 's'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add / edit */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>{editing ? 'Edit exam' : 'Add exam'}</DialogTitle>
-              <DialogDescription>Track a test or exam for {semester}.</DialogDescription>
+              <DialogDescription>
+                Track a test or exam for {editing ? editing.semester : semester}.
+              </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-2">
-              <Label htmlFor="exam-name">Name</Label>
-              <Input
-                id="exam-name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Mid-semester exam"
-                required
-                autoFocus
-              />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="exam-code">Course code</Label>
+                <Input
+                  id="exam-code"
+                  value={form.courseCode}
+                  onChange={(e) => setForm({ ...form, courseCode: e.target.value })}
+                  placeholder="MA231"
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="exam-name">Name</Label>
+                <Input
+                  id="exam-name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Mathematics - II"
+                  required
+                  autoFocus
+                />
+              </div>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="exam-subject">Subject</Label>
@@ -312,7 +610,7 @@ export function ExamsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_SUBJECT}>All / common</SelectItem>
-                    {semesterSubjects.map((s) => (
+                    {(semesterSubjects.length > 0 ? semesterSubjects : subjects).map((s) => (
                       <SelectItem key={s.id} value={String(s.id)}>
                         {s.name}
                       </SelectItem>
@@ -320,6 +618,19 @@ export function ExamsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="exam-group">Exam group</Label>
+                <Input
+                  id="exam-group"
+                  list="exam-group-options"
+                  value={form.examGroup}
+                  onChange={(e) => setForm({ ...form, examGroup: e.target.value })}
+                  placeholder="End Semester"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="exam-date">Date</Label>
                 <Input
@@ -330,7 +641,36 @@ export function ExamsPage() {
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="exam-start">Starts</Label>
+                <Input
+                  id="exam-start"
+                  type="time"
+                  value={form.startTime}
+                  onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="exam-report">Report by</Label>
+                <Input
+                  id="exam-report"
+                  type="time"
+                  value={form.reportingTime}
+                  onChange={(e) => setForm({ ...form, reportingTime: e.target.value })}
+                />
+              </div>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="exam-location">Location</Label>
+              <Input
+                id="exam-location"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="BLOCK II - Floor:FIRST - Room:K224"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="exam-notes">Notes (optional)</Label>
               <Input
@@ -353,93 +693,12 @@ export function ExamsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={draftOpen} onOpenChange={setDraftOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Review imported exams</DialogTitle>
-            <DialogDescription>
-              Drafted from {draftSource}. Fix any subject, name, or date, remove rows you don't want, then
-              save — nothing is added until you do.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
-            {draftRows.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No rows. Add one below or cancel.
-              </p>
-            )}
-            {draftRows.map((r) => (
-              <div key={r.key} className="flex items-end gap-2">
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Name</Label>
-                  <Input
-                    value={r.name}
-                    onChange={(e) => updateDraftRow(r.key, { name: e.target.value })}
-                    placeholder="Exam name"
-                  />
-                </div>
-                <div className="w-40 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Subject</Label>
-                  <Select value={r.subjectId} onValueChange={(v) => updateDraftRow(r.key, { subjectId: v })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_SUBJECT}>All / common</SelectItem>
-                      {semesterSubjects.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-36 space-y-1">
-                  <Label className="text-xs text-muted-foreground">Date</Label>
-                  <Input
-                    type="date"
-                    value={r.date}
-                    onChange={(e) => updateDraftRow(r.key, { date: e.target.value })}
-                  />
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => removeDraftRow(r.key)}
-                  aria-label="Remove row"
-                >
-                  <X />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          <DialogFooter className="sm:justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() =>
-                setDraftRows((rows) => [
-                  ...rows,
-                  { key: `draft-new-${rows.length}-${Date.now()}`, name: '', subjectId: NO_SUBJECT, date: todayIso() },
-                ])
-              }
-            >
-              <Plus /> Add row
-            </Button>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setDraftOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveDraft} disabled={saving || draftRows.every((r) => !r.name.trim() || !r.date)}>
-                Save {draftRows.filter((r) => r.name.trim() && r.date).length} exam
-                {draftRows.filter((r) => r.name.trim() && r.date).length === 1 ? '' : 's'}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Shared suggestions for both exam-group inputs. */}
+      <datalist id="exam-group-options">
+        {groupSuggestions.map((g) => (
+          <option key={g} value={g} />
+        ))}
+      </datalist>
 
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>

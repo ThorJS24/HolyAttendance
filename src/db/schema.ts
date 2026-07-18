@@ -185,6 +185,20 @@ export const exams = sqliteTable('exams', {
   date: text('date').notNull(),
   semester: text('semester').notNull(),
   notes: text('notes'),
+  // Course/paper code as printed on the hall ticket, e.g. "MA231".
+  courseCode: text('course_code'),
+  // Where it's held, e.g. "BLOCK II - Floor:FIRST - Room:K224".
+  location: text('location'),
+  // "HH:MM" (24h). startTime is when the paper begins; reportingTime is the
+  // earlier "be seated by" time. Both null when unknown — a date-only exam
+  // still works everywhere, so nothing may assume these are present.
+  startTime: text('start_time'),
+  reportingTime: text('reporting_time'),
+  // Groups exams that belong to one sitting, e.g. "End Semester" /
+  // "Mid Semester". Deliberately free text rather than its own table: the
+  // Exams page just nests semester > group > exams, and a personal app doesn't
+  // need group CRUD. Null means ungrouped.
+  examGroup: text('exam_group'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
