@@ -10,6 +10,7 @@ import type {
   RolloverPreview,
 } from '../db/repositories/semesters'
 import type { Subject, NewSubject, SubjectUpdate } from '../db/repositories/subjects'
+import type { EsproStatus, EsproSaveResult } from '../espro/types'
 import type {
   TimetableSlot,
   NewTimetableSlot,
@@ -98,6 +99,10 @@ export const IPC_CHANNELS = {
   backupNow: 'backup:now',
   backupRestore: 'backup:restore',
   backupChooseDir: 'backup:chooseDir',
+
+  esproGetStatus: 'espro:getStatus',
+  esproSaveCredential: 'espro:saveCredential',
+  esproRemoveCredential: 'espro:removeCredential',
 } as const
 
 export interface BunkMateApi {
@@ -215,5 +220,19 @@ export interface BunkMateApi {
     restore: () => Promise<boolean>
     /** Opens a directory picker; returns the chosen path, or null if cancelled. */
     chooseDir: () => Promise<string | null>
+  }
+
+  espro: {
+    /** Whether encryption is available, a credential is stored, and for whom. */
+    getStatus: () => Promise<EsproStatus>
+    /**
+     * Encrypts the password with safeStorage and writes it (plus a plaintext
+     * username sidecar) to userData. Returns a structured failure rather than
+     * throwing when encryption is unavailable or input is invalid — the
+     * plaintext password is never persisted, logged, or echoed back.
+     */
+    saveCredential: (input: { username: string; password: string }) => Promise<EsproSaveResult>
+    /** Deletes the stored encrypted credential and its sidecar entirely. */
+    removeCredential: () => Promise<void>
   }
 }

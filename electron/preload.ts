@@ -91,6 +91,12 @@ const api: BunkMateApi = {
     openPdfText: () => ipcRenderer.invoke(IPC_CHANNELS.filesOpenPdfText),
   },
 
+  espro: {
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.esproGetStatus),
+    saveCredential: (input) => ipcRenderer.invoke(IPC_CHANNELS.esproSaveCredential, input),
+    removeCredential: () => ipcRenderer.invoke(IPC_CHANNELS.esproRemoveCredential),
+  },
+
   backup: {
     now: () => ipcRenderer.invoke(IPC_CHANNELS.backupNow),
     restore: () => ipcRenderer.invoke(IPC_CHANNELS.backupRestore),

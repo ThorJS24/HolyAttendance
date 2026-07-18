@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderOpen, Save, Upload } from 'lucide-react'
+import { FolderOpen, Save, Upload, Trash2, KeyRound, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -15,10 +16,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { EsproDisclosure, EsproAboutDialog } from '@/components/espro-disclosure'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
 import { NOTIFICATION_CATEGORY_LABELS, type NotificationCategory } from '@/lib/notifications'
+import type { EsproStatus } from '../../electron/espro/types'
 
 export function SettingsPage() {
   const {
@@ -69,6 +72,67 @@ export function SettingsPage() {
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [restoring, setRestoring] = useState(false)
+
+  // ESPRO sync credential state. The password lives only in this component's
+  // local state while being typed and is cleared right after a save — it's
+  // never lifted into a store or persisted unencrypted.
+  const [esproStatus, setEsproStatus] = useState<EsproStatus | null>(null)
+  const [esproAck, setEsproAck] = useState(false)
+  const [esproUsername, setEsproUsername] = useState('')
+  const [esproPassword, setEsproPassword] = useState('')
+  const [esproSaving, setEsproSaving] = useState(false)
+  const [esproRemoveOpen, setEsproRemoveOpen] = useState(false)
+  const [esproAboutOpen, setEsproAboutOpen] = useState(false)
+
+  async function loadEsproStatus() {
+    try {
+      setEsproStatus(await window.bunkmate.espro.getStatus())
+    } catch {
+      // No handler yet / unexpected failure — fail safe to "can't store".
+      setEsproStatus({ encryptionAvailable: false, hasCredential: false, username: null })
+    }
+  }
+
+  useEffect(() => {
+    loadEsproStatus()
+  }, [])
+
+  async function handleEsproSave() {
+    if (!esproUsername.trim() || !esproPassword) return
+    setEsproSaving(true)
+    try {
+      const result = await window.bunkmate.espro.saveCredential({
+        username: esproUsername.trim(),
+        password: esproPassword,
+      })
+      if (result.ok) {
+        setEsproPassword('') // drop the plaintext from memory immediately
+        setEsproAck(false)
+        pushToast({ title: 'ESPRO credentials saved', description: 'Encrypted and stored on this device.' })
+        await loadEsproStatus()
+      } else {
+        pushToast({ title: "Couldn't save credentials", description: result.message })
+      }
+    } catch {
+      pushToast({ title: "Couldn't save credentials", description: 'ESPRO storage is unavailable.' })
+    } finally {
+      setEsproSaving(false)
+    }
+  }
+
+  async function handleEsproRemove() {
+    setEsproRemoveOpen(false)
+    try {
+      await window.bunkmate.espro.removeCredential()
+      setEsproUsername('')
+      setEsproPassword('')
+      setEsproAck(false)
+      pushToast({ title: 'ESPRO credentials removed', description: 'The encrypted file was deleted.' })
+      await loadEsproStatus()
+    } catch {
+      pushToast({ title: "Couldn't remove credentials" })
+    }
+  }
 
   async function handleChooseBackupDir() {
     const dir = await window.bunkmate.backup.chooseDir()
@@ -317,6 +381,120 @@ export function SettingsPage() {
           </CardDescription>
         </CardHeader>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>ESPRO sync</CardTitle>
+          <CardDescription>
+            Optionally store your ESPRO login so BunkMate can pull your official attendance for you.{' '}
+            <button type="button" className="underline" onClick={() => setEsproAboutOpen(true)}>
+              About ESPRO sync &amp; your data
+            </button>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {esproStatus === null ? (
+            <p className="text-sm text-muted-foreground">Checking…</p>
+          ) : !esproStatus.encryptionAvailable ? (
+            // Part B5: never pretend we can encrypt when the OS can't.
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <div className="space-y-1">
+                <p className="font-medium">Secure storage unavailable on this device</p>
+                <p className="text-muted-foreground">
+                  Your operating system didn't provide a credential-encryption backend (safeStorage reported none), so
+                  BunkMate won't store an ESPRO password it can't encrypt. ESPRO sync is disabled until this is
+                  available.
+                </p>
+              </div>
+            </div>
+          ) : esproStatus.hasCredential ? (
+            // Credential on record: show whose, never the password, and offer removal.
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <KeyRound className="size-4 text-success" />
+                <span>
+                  Stored for <span className="font-medium">{esproStatus.username ?? 'your account'}</span> — encrypted on
+                  this device.
+                </span>
+              </div>
+              <Button type="button" variant="destructive" onClick={() => setEsproRemoveOpen(true)}>
+                <Trash2 /> Remove ESPRO credentials
+              </Button>
+            </div>
+          ) : (
+            // No credential yet: gate the entry fields behind an explicit ack.
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <EsproDisclosure />
+              </div>
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={esproAck}
+                  onCheckedChange={(v) => setEsproAck(v === true)}
+                />
+                <span>I understand how my ESPRO login is stored and want to continue.</span>
+              </label>
+
+              <fieldset disabled={!esproAck} className="space-y-3 disabled:opacity-50">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="espro-username">ESPRO username / roll number</Label>
+                    <Input
+                      id="espro-username"
+                      autoComplete="off"
+                      value={esproUsername}
+                      onChange={(e) => setEsproUsername(e.target.value)}
+                      placeholder="2247xxx"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="espro-password">ESPRO password</Label>
+                    <Input
+                      id="espro-password"
+                      type="password"
+                      autoComplete="off"
+                      value={esproPassword}
+                      onChange={(e) => setEsproPassword(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleEsproSave}
+                  disabled={esproSaving || !esproUsername.trim() || !esproPassword}
+                >
+                  <KeyRound /> Save &amp; encrypt
+                </Button>
+              </fieldset>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={esproRemoveOpen} onOpenChange={setEsproRemoveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove ESPRO credentials?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the encrypted ESPRO login stored on this device. Attendance you've already
+              imported stays; you'll just need to re-enter your login to sync again. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEsproRemoveOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleEsproRemove}>
+              <Trash2 /> Remove credentials
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <EsproAboutDialog open={esproAboutOpen} onOpenChange={setEsproAboutOpen} />
 
       <Card>
         <CardHeader>
