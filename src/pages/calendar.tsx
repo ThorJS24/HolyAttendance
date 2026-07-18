@@ -248,6 +248,16 @@ function CalendarGrid() {
     setYellowFormDialogOpen(true)
   }
 
+  /** One-click entry point from a specific class row: opens the same filing
+   * dialog already scoped to just that period, so filing for one class is a
+   * click + a reason rather than a hunt through the whole-day dialog. */
+  function openYellowFormForPeriod(period: number) {
+    setYellowFormScope('period')
+    setYellowFormPeriod(String(period))
+    setYellowFormReason('')
+    setYellowFormDialogOpen(true)
+  }
+
   async function handleFileYellowForm() {
     if (!selectedDate) return
     const targets =
@@ -486,6 +496,18 @@ function CalendarGrid() {
                         >
                           Absent
                         </Button>
+                        {!yellowForm && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-8"
+                            title="File a yellow form for this class"
+                            aria-label={`File a yellow form for P${slot.period}`}
+                            onClick={() => openYellowFormForPeriod(slot.period)}
+                          >
+                            <FileWarning className="size-4" />
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>
