@@ -33,6 +33,16 @@ import { cn } from '@/lib/utils'
 
 const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+// Period types that never carry attendance, so "Mark all" skips them:
+// meeting is the 'excluded' bucket and lunch the 'ignored' one (see
+// period-type-rules). Every other type — class, mentoring, minor, project —
+// folds into a counted bucket and is markable, exactly like the per-period
+// Present/Absent buttons. Deliberately NOT reusing timetable-rules'
+// DEFAULT_NON_TEACHING_TYPES: it holds the same two values today but answers
+// a different question ("does this count toward the teaching-hours cap"),
+// and coupling the two would let a change to one silently move the other.
+const NON_ATTENDANCE_TYPES: readonly string[] = ['meeting', 'lunch']
+
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
@@ -199,10 +209,14 @@ function CalendarGrid() {
     pushToast({ title: `Marked ${status}` })
   }
 
-  // Periods that can actually carry attendance: a real subject is required,
-  // which already excludes lunch and the typeless types (meeting/mentoring/
-  // minor) since those never have a subject attached.
-  const markableSlots = (selected?.slots ?? []).filter((s) => s.type !== 'lunch' && s.subjectId !== null)
+  // Periods "Mark all" writes: everything except meeting and lunch, matching
+  // the per-period Present/Absent buttons. The subject guard is a hard
+  // requirement (an attendance record can't exist without a subjectId), not
+  // a type exclusion — a subject-bearing mentoring/minor period is markable
+  // just like a class one.
+  const markableSlots = (selected?.slots ?? []).filter(
+    (s) => !NON_ATTENDANCE_TYPES.includes(s.type) && s.subjectId !== null,
+  )
 
   async function markWholeDay(status: 'present' | 'absent') {
     if (markableSlots.length === 0) return
