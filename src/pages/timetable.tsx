@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2, TriangleAlert, CopyPlus, CalendarRange, Table2, Import, Eraser } from 'lucide-react'
+import { Trash2, Settings2, TriangleAlert, CopyPlus, CalendarRange, Table2, Import, Eraser, CalendarPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +26,7 @@ import { validateTimetableDay } from '@/lib/timetable-rules'
 import { allocateEvenPeriodTimes } from '@/lib/period-time-allocation'
 import { planDragDrop } from '@/lib/timetable-drag'
 import { planTimetableCopy } from '@/lib/timetable-copy'
+import { buildTimetableIcs } from '@/lib/timetable-ics'
 import { TimetableWeekGlance } from '@/components/timetable-week-glance'
 import { cn } from '@/lib/utils'
 
@@ -260,6 +261,37 @@ export function TimetablePage() {
       title: `Cleared ${DAY_LABELS[day]}`,
       description: `${daySlots.length} period${daySlots.length === 1 ? '' : 's'} removed`,
     })
+  }
+
+  // ICS export needs real clock times (period times). Gate the button on
+  // them so the user gets the same graceful "set times first" message as the
+  // reminders feature, rather than an empty calendar.
+  const hasPeriodTimes = (activeSemester?.periodTimes?.length ?? 0) > 0
+
+  async function exportIcs() {
+    if (!activeSemester) return
+    const ics = buildTimetableIcs({
+      slots: slots.map((s) => {
+        const time = periodTimeByPeriod.get(s.period)
+        return {
+          day: s.day,
+          period: s.period,
+          type: s.type,
+          subjectName: s.subjectId !== null ? (subjectsById.get(s.subjectId)?.name ?? null) : null,
+          startTime: time?.startTime ?? s.startTime,
+          endTime: time?.endTime ?? s.endTime,
+        }
+      }),
+      semesterLabel: activeSemester.label,
+      startDate: activeSemester.startDate,
+      endDate: activeSemester.endDate,
+    })
+    const savedPath = await window.bunkmate.files.saveFile({
+      defaultName: `timetable-${activeSemester.label}.ics`,
+      content: ics,
+      filters: [{ name: 'iCalendar', extensions: ['ics'] }],
+    })
+    if (savedPath) pushToast({ title: 'Timetable exported', description: savedPath })
   }
 
   // --- Drag-to-reschedule ---------------------------------------------
@@ -498,6 +530,19 @@ export function TimetablePage() {
                 disabled={!activeSemester || slots.length === 0}
               >
                 <CopyPlus /> Copy day
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportIcs}
+                disabled={!activeSemester || !hasPeriodTimes || slots.length === 0}
+                title={
+                  hasPeriodTimes
+                    ? 'Export to a calendar (.ics) with real class times'
+                    : 'Set class times first (Grid settings → Auto-allocate times) to export real times'
+                }
+              >
+                <CalendarPlus /> Export .ics
               </Button>
               <Button variant="outline" size="sm" onClick={openGridSettings} disabled={!activeSemester}>
                 <Settings2 /> Grid settings
