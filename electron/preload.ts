@@ -88,6 +88,7 @@ const api: BunkMateApi = {
   files: {
     saveFile: (opts) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveFile, opts),
     openTextFile: (opts) => ipcRenderer.invoke(IPC_CHANNELS.filesOpenTextFile, opts),
+    openPdfText: () => ipcRenderer.invoke(IPC_CHANNELS.filesOpenPdfText),
   },
 
   backup: {

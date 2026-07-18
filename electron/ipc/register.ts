@@ -1,5 +1,6 @@
 import { ipcMain, dialog, app } from 'electron'
 import fs from 'node:fs'
+import { extractPdfText } from '../pdf-text'
 import type { AppDatabase } from '../db/client'
 import { IPC_CHANNELS } from './contract'
 import { backupNow, restoreFrom, defaultBackupFileName } from '../backup'
@@ -142,6 +143,17 @@ export function registerIpcHandlers(db: AppDatabase): void {
       return { name: filePath.split(/[\\/]/).pop() ?? filePath, content: fs.readFileSync(filePath, 'utf8') }
     },
   )
+
+  ipcMain.handle(IPC_CHANNELS.filesOpenPdfText, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const filePath = result.filePaths[0]
+    const text = await extractPdfText(new Uint8Array(fs.readFileSync(filePath)))
+    return { name: filePath.split(/[\\/]/).pop() ?? filePath, text }
+  })
 
   ipcMain.handle(IPC_CHANNELS.backupNow, async () => {
     const result = await dialog.showSaveDialog({

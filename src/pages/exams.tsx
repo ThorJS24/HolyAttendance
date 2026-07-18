@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, FileUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +22,7 @@ import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToastStore } from '@/store/toast-store'
 import { countdownLabel, daysUntil, todayIso } from '@/lib/date-utils'
+import { parseHallTicket } from '@/lib/hall-ticket-parser'
 import type { Exam } from '../../electron/db/repositories/exams'
 
 const NO_SUBJECT = 'none'
@@ -37,6 +38,14 @@ function emptyForm(): ExamFormState {
   return { name: '', subjectId: NO_SUBJECT, date: todayIso(), notes: '' }
 }
 
+// A single editable row in the hall-ticket import draft.
+interface DraftRow {
+  key: string
+  name: string
+  subjectId: string
+  date: string
+}
+
 export function ExamsPage() {
   const semester = useSettingsStore((s) => s.currentSemester)
   const { exams, loading, load, create, update, remove } = useExamsStore()
@@ -48,6 +57,11 @@ export function ExamsPage() {
   const [form, setForm] = useState<ExamFormState>(emptyForm())
   const [deleteTarget, setDeleteTarget] = useState<Exam | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const [importing, setImporting] = useState(false)
+  const [draftOpen, setDraftOpen] = useState(false)
+  const [draftRows, setDraftRows] = useState<DraftRow[]>([])
+  const [draftSource, setDraftSource] = useState<string>('')
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -110,6 +124,72 @@ export function ExamsPage() {
     }
   }
 
+  async function handleImportPdf() {
+    setImporting(true)
+    try {
+      const picked = await window.bunkmate.files.openPdfText()
+      if (!picked) return // cancelled
+      const rows = parseHallTicket(
+        picked.text,
+        semesterSubjects.map((s) => ({ id: s.id, name: s.name })),
+      )
+      if (rows.length === 0) {
+        pushToast({
+          title: 'No exam dates found',
+          description: `Couldn't read any dates from ${picked.name}. Add them manually, or check it's a text PDF (not a scan).`,
+        })
+        return
+      }
+      setDraftRows(
+        rows.map((r, i) => ({
+          key: `draft-${i}`,
+          name: r.name,
+          subjectId: r.subjectId === null ? NO_SUBJECT : String(r.subjectId),
+          date: r.date,
+        })),
+      )
+      setDraftSource(picked.name)
+      setDraftOpen(true)
+    } catch (err) {
+      pushToast({
+        title: 'Could not read that PDF',
+        description: err instanceof Error ? err.message : 'The file may be encrypted or scanned (image-only).',
+      })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function updateDraftRow(key: string, patch: Partial<DraftRow>) {
+    setDraftRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+  }
+
+  function removeDraftRow(key: string) {
+    setDraftRows((rows) => rows.filter((r) => r.key !== key))
+  }
+
+  async function handleSaveDraft() {
+    const valid = draftRows.filter((r) => r.name.trim() && r.date)
+    if (valid.length === 0) return
+    setSaving(true)
+    try {
+      for (const r of valid) {
+        await create({
+          name: r.name.trim(),
+          subjectId: r.subjectId === NO_SUBJECT ? null : Number(r.subjectId),
+          date: r.date,
+          semester,
+          notes: null,
+        })
+      }
+      setDraftOpen(false)
+      setDraftRows([])
+      pushToast({ title: `Added ${valid.length} exam${valid.length === 1 ? '' : 's'}`, description: `From ${draftSource}` })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleConfirmDelete() {
     if (!deleteTarget) return
     const target = deleteTarget
@@ -133,6 +213,9 @@ export function ExamsPage() {
         <h1 className="text-2xl font-semibold">Exams</h1>
         <div className="flex items-center gap-3">
           <SemesterSwitcher />
+          <Button variant="outline" onClick={handleImportPdf} disabled={importing}>
+            {importing ? <Spinner className="size-4" /> : <FileUp />} Import hall ticket
+          </Button>
           <Button onClick={openCreate}>
             <Plus /> Add exam
           </Button>
@@ -267,6 +350,94 @@ export function ExamsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={draftOpen} onOpenChange={setDraftOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review imported exams</DialogTitle>
+            <DialogDescription>
+              Drafted from {draftSource}. Fix any subject, name, or date, remove rows you don't want, then
+              save — nothing is added until you do.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+            {draftRows.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No rows. Add one below or cancel.
+              </p>
+            )}
+            {draftRows.map((r) => (
+              <div key={r.key} className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Name</Label>
+                  <Input
+                    value={r.name}
+                    onChange={(e) => updateDraftRow(r.key, { name: e.target.value })}
+                    placeholder="Exam name"
+                  />
+                </div>
+                <div className="w-40 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Subject</Label>
+                  <Select value={r.subjectId} onValueChange={(v) => updateDraftRow(r.key, { subjectId: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_SUBJECT}>All / common</SelectItem>
+                      {semesterSubjects.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-36 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Date</Label>
+                  <Input
+                    type="date"
+                    value={r.date}
+                    onChange={(e) => updateDraftRow(r.key, { date: e.target.value })}
+                  />
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => removeDraftRow(r.key)}
+                  aria-label="Remove row"
+                >
+                  <X />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() =>
+                setDraftRows((rows) => [
+                  ...rows,
+                  { key: `draft-new-${rows.length}-${Date.now()}`, name: '', subjectId: NO_SUBJECT, date: todayIso() },
+                ])
+              }
+            >
+              <Plus /> Add row
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setDraftOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveDraft} disabled={saving || draftRows.every((r) => !r.name.trim() || !r.date)}>
+                Save {draftRows.filter((r) => r.name.trim() && r.date).length} exam
+                {draftRows.filter((r) => r.name.trim() && r.date).length === 1 ? '' : 's'}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

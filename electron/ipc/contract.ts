@@ -93,6 +93,7 @@ export const IPC_CHANNELS = {
 
   filesSaveFile: 'files:saveFile',
   filesOpenTextFile: 'files:openTextFile',
+  filesOpenPdfText: 'files:openPdfText',
 
   backupNow: 'backup:now',
   backupRestore: 'backup:restore',
@@ -195,6 +196,12 @@ export interface BunkMateApi {
     openTextFile: (opts: {
       filters: { name: string; extensions: string[] }[]
     }) => Promise<{ name: string; content: string } | null>
+    /**
+     * Opens a native open dialog filtered to PDFs and returns the extracted
+     * text (digital/text-selectable PDFs only — no OCR). Null if cancelled;
+     * throws if the file can't be read as a PDF.
+     */
+    openPdfText: () => Promise<{ name: string; text: string } | null>
   }
 
   backup: {

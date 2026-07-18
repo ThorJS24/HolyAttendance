@@ -1,0 +1,80 @@
+import { describe, it, expect } from 'vitest'
+import { findDate, parseHallTicket } from './hall-ticket-parser'
+
+describe('findDate', () => {
+  it('reads dd-mm-yyyy day-first', () => {
+    expect(findDate('CSE731 Data Engineering 15-12-2026 10:00 AM')?.iso).toBe('2026-12-15')
+  })
+  it('reads dd/mm/yyyy and dd.mm.yyyy', () => {
+    expect(findDate('exam on 17/12/2026')?.iso).toBe('2026-12-17')
+    expect(findDate('exam on 03.01.2027')?.iso).toBe('2027-01-03')
+  })
+  it('reads "19 Dec 2026" and full month names', () => {
+    expect(findDate('Data Ethics 19 Dec 2026')?.iso).toBe('2026-12-19')
+    expect(findDate('Data Ethics 5 September 2026')?.iso).toBe('2026-09-05')
+  })
+  it('reads "Dec 19, 2026" month-first', () => {
+    expect(findDate('Dec 19, 2026 forenoon')?.iso).toBe('2026-12-19')
+  })
+  it('reads ISO yyyy-mm-dd without treating it as day-first', () => {
+    expect(findDate('2026-12-15 slot A')?.iso).toBe('2026-12-15')
+  })
+  it('expands 2-digit years', () => {
+    expect(findDate('15-12-26')?.iso).toBe('2026-12-15')
+  })
+  it('returns null when there is no date', () => {
+    expect(findDate('Course Code   Course Title   Session')).toBeNull()
+  })
+})
+
+describe('parseHallTicket', () => {
+  const subjects = [
+    { id: 1, name: 'Data Engineering' },
+    { id: 2, name: 'Prompt Engineering' },
+    { id: 3, name: 'Data Ethics' },
+  ]
+
+  // Mirrors what pdf-parse yields from a digital hall ticket (row per line).
+  const text = `
+CHRIST (Deemed to be University) - Hall Ticket
+Course Code   Course Title                Date          Session
+CSE731        Data Engineering            15-12-2026    10:00 AM
+CSE732        Prompt Engineering          17/12/2026    02:00 PM
+CSE733        Data Ethics                 19 Dec 2026   10:00 AM
+Date of issue: 01-12-2026`
+
+  it('produces one draft row per exam line, chronologically', () => {
+    const rows = parseHallTicket(text, subjects)
+    expect(rows.map((r) => r.date)).toEqual(['2026-12-15', '2026-12-17', '2026-12-19'])
+  })
+
+  it('matches subjects and derives clean exam names', () => {
+    const rows = parseHallTicket(text, subjects)
+    expect(rows[0]).toMatchObject({ date: '2026-12-15', subjectId: 1, name: 'Data Engineering' })
+    expect(rows[1]).toMatchObject({ date: '2026-12-17', subjectId: 2, name: 'Prompt Engineering' })
+    expect(rows[2]).toMatchObject({ date: '2026-12-19', subjectId: 3, name: 'Data Ethics' })
+  })
+
+  it('skips header rows and issue/print date lines', () => {
+    const rows = parseHallTicket(text, subjects)
+    expect(rows).toHaveLength(3)
+    expect(rows.some((r) => r.date === '2026-12-01')).toBe(false)
+  })
+
+  it('matches a subject by embedded course code in its name', () => {
+    const coded = [{ id: 9, name: 'Machine Learning (CSE801)' }]
+    const rows = parseHallTicket('CSE801  Machine Lrng Theory  20-12-2026', coded)
+    expect(rows[0].subjectId).toBe(9)
+  })
+
+  it('leaves subjectId null and keeps a usable name when nothing matches', () => {
+    const rows = parseHallTicket('ZZZ999  Unknown Subject  21-12-2026', subjects)
+    expect(rows[0].subjectId).toBeNull()
+    expect(rows[0].name.length).toBeGreaterThan(1)
+  })
+
+  it('de-duplicates repeated date+name lines', () => {
+    const dup = `CSE731 Data Engineering 15-12-2026\nCSE731 Data Engineering 15-12-2026`
+    expect(parseHallTicket(dup, subjects)).toHaveLength(1)
+  })
+})
