@@ -84,7 +84,11 @@ export function DashboardPage() {
 
   const subjectRows = useMemo(
     () =>
+      // Scope to the current semester's subjects — loadSubjects pulls every
+      // semester's, so without this a subject of the same/other name from
+      // another semester shows as an empty 0/0 row.
       subjects
+        .filter((subject) => subject.semester === semester)
         .map((subject) => {
           const stats = bySubject.get(subject.id)
           const overallStats = stats?.overall ?? { total: 0, attended: 0, percentage: null }
@@ -101,7 +105,7 @@ export function DashboardPage() {
           return { subject, stats, overallStats, resolvedTarget, safeBunks, streak, projection, series }
         })
         .sort((a, b) => (a.overallStats.percentage ?? 100) - (b.overallStats.percentage ?? 100)),
-    [subjects, bySubject, subjectMinTarget, streaksBySubject, remainingBySubject, recordsBySubject],
+    [subjects, semester, bySubject, subjectMinTarget, streaksBySubject, remainingBySubject, recordsBySubject],
   )
 
   const belowTarget = subjectRows.filter(
