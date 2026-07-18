@@ -9,6 +9,7 @@ interface SettingsState {
   density: string
   classReminders: boolean
   classReminderLeadMinutes: number
+  launchView: string
   mutedNotificationCategories: string[]
   backupIntervalDays: number
   backupDir: string | null
@@ -23,6 +24,7 @@ interface SettingsState {
   setDensity: (value: string) => Promise<void>
   setClassReminders: (value: boolean) => Promise<void>
   setClassReminderLeadMinutes: (value: number) => Promise<void>
+  setLaunchView: (value: string) => Promise<void>
   setMutedNotificationCategories: (value: string[]) => Promise<void>
   setBackupIntervalDays: (value: number) => Promise<void>
   setBackupDir: (value: string | null) => Promise<void>
@@ -37,6 +39,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   density: 'comfortable',
   classReminders: false,
   classReminderLeadMinutes: 10,
+  launchView: 'today',
   mutedNotificationCategories: [],
   backupIntervalDays: 7,
   backupDir: null,
@@ -54,6 +57,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       density: settings.density,
       classReminders: settings.classReminders,
       classReminderLeadMinutes: settings.classReminderLeadMinutes,
+      launchView: settings.launchView,
       mutedNotificationCategories: settings.mutedNotificationCategories ?? [],
       backupIntervalDays: settings.backupIntervalDays,
       backupDir: settings.backupDir ?? null,
@@ -93,6 +97,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setClassReminderLeadMinutes: async (classReminderLeadMinutes) => {
     await window.bunkmate.settings.update({ classReminderLeadMinutes })
     set({ classReminderLeadMinutes })
+  },
+  setLaunchView: async (launchView) => {
+    await window.bunkmate.settings.update({ launchView })
+    set({ launchView })
   },
   setMutedNotificationCategories: async (mutedNotificationCategories) => {
     await window.bunkmate.settings.update({ mutedNotificationCategories })

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { HashRouter, Route, Routes } from 'react-router-dom'
+import { HashRouter, Route, Routes, Navigate } from 'react-router-dom'
 import { AppShell } from '@/layout/app-shell'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSemestersStore } from '@/store/semesters-store'
@@ -21,6 +21,7 @@ const AnalyticsPage = lazy(() => import('@/pages/analytics').then((m) => ({ defa
 const SettingsPage = lazy(() => import('@/pages/settings').then((m) => ({ default: m.SettingsPage })))
 const SemestersPage = lazy(() => import('@/pages/semesters').then((m) => ({ default: m.SemestersPage })))
 const ExamsPage = lazy(() => import('@/pages/exams').then((m) => ({ default: m.ExamsPage })))
+const TodayPage = lazy(() => import('@/pages/today').then((m) => ({ default: m.TodayPage })))
 
 function RouteFallback() {
   return (
@@ -28,6 +29,15 @@ function RouteFallback() {
       <Spinner className="size-6 text-muted-foreground" />
     </div>
   )
+}
+
+/** The index route sends the user to their chosen launch view once settings
+ * have loaded (so the choice is honored on cold start), defaulting to Today. */
+function LaunchRedirect() {
+  const settingsLoaded = useSettingsStore((s) => s.loaded)
+  const launchView = useSettingsStore((s) => s.launchView)
+  if (!settingsLoaded) return <RouteFallback />
+  return <Navigate to={launchView === 'dashboard' ? '/dashboard' : '/today'} replace />
 }
 
 function App() {
@@ -61,7 +71,9 @@ function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<DashboardPage />} />
+            <Route index element={<LaunchRedirect />} />
+            <Route path="today" element={<TodayPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="subjects" element={<SubjectsPage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="timetable" element={<TimetablePage />} />

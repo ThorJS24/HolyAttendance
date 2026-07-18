@@ -26,6 +26,7 @@ export function SettingsPage() {
     subjectMinTarget,
     theme,
     density,
+    launchView,
     atRiskMarginPp,
     mutedNotificationCategories,
     classReminders,
@@ -39,6 +40,7 @@ export function SettingsPage() {
     setAtRiskMarginPp,
     setTheme,
     setDensity,
+    setLaunchView,
     setMutedNotificationCategories,
     setClassReminders,
     setClassReminderLeadMinutes,
@@ -207,6 +209,18 @@ export function SettingsPage() {
               <SelectContent>
                 <SelectItem value="comfortable">Comfortable</SelectItem>
                 <SelectItem value="compact">Compact</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="launch-view">Open on launch</Label>
+            <Select value={launchView} onValueChange={setLaunchView}>
+              <SelectTrigger id="launch-view" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="dashboard">Dashboard</SelectItem>
               </SelectContent>
             </Select>
           </div>

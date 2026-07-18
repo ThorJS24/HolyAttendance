@@ -22,6 +22,7 @@ import { useAttendanceStore } from '@/store/attendance-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useLeavePlansStore } from '@/store/leave-plans-store'
 import { useExamsStore } from '@/store/exams-store'
+import { useDayMarking } from '@/hooks/use-day-marking'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
 import { jsDayToWeekday } from '@/lib/attendance-engine'
@@ -93,13 +94,7 @@ function CalendarGrid() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const currentSemester = useSettingsStore((s) => s.currentSemester)
   const { slots, load: loadSlots } = useTimetableStore()
-  const {
-    records,
-    load: loadRecords,
-    create: createRecord,
-    update: updateRecord,
-    remove: removeRecord,
-  } = useAttendanceStore()
+  const { records, load: loadRecords } = useAttendanceStore()
   const { holidays, load: loadHolidays, create: createHoliday, remove: removeHoliday } = useHolidaysStore()
   const { exams, load: loadExams } = useExamsStore()
   const { plans, load: loadPlans } = useLeavePlansStore()
@@ -203,51 +198,13 @@ function CalendarGrid() {
     return new Map(resolved.map((p) => [p.slotId, p.effectiveStatus]))
   }, [selectedDate, slots, recordsByDate])
 
-  /** Writes one period's status, reusing the existing record if there is one.
-   * Shared by the per-period buttons and the whole-day batch actions so both
-   * paths create/update records identically. Returns an undo closure that
-   * restores the exact prior state — either the record's old status, or
-   * deleting it if the write was what created it. */
-  async function writeAttendance(
-    subjectId: number,
-    slotId: number,
-    status: 'present' | 'absent',
-  ): Promise<() => Promise<void>> {
-    if (!selectedDate) return async () => {}
-    const slot = slots.find((s) => s.id === slotId)
-    if (!slot) return async () => {}
-    const existing = selected?.records.find((r) => r.subjectId === subjectId && r.period === slot.period)
-    if (existing) {
-      const priorStatus = existing.status
-      await updateRecord(existing.id, { status })
-      return async () => {
-        await updateRecord(existing.id, { status: priorStatus })
-      }
-    }
-    const created = await createRecord({
-      subjectId,
-      date: selectedDate,
-      period: slot.period,
-      status,
-      source: 'manual',
-      slotId,
-    })
-    return async () => {
-      await removeRecord(created.id)
-    }
-  }
+  // Attendance marking (per-period + batch) is shared with the Today view via
+  // useDayMarking so the create/update/undo behaviour lives in one place.
+  const { writeAttendance: markWrite, toggle: markToggle } = useDayMarking()
 
   async function toggleAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
-    const undo = await writeAttendance(subjectId, slotId, status)
-    pushToast({
-      title: `Marked ${status}`,
-      action: {
-        label: 'Undo',
-        onClick: () => {
-          void undo()
-        },
-      },
-    })
+    if (!selectedDate) return
+    await markToggle(selectedDate, subjectId, slotId, status)
   }
 
   // Periods "Mark all" writes: everything except meeting and lunch, matching
@@ -265,7 +222,8 @@ function CalendarGrid() {
     try {
       const undos: (() => Promise<void>)[] = []
       for (const slot of markableSlots) {
-        undos.push(await writeAttendance(slot.subjectId as number, slot.id, status))
+        if (!selectedDate) continue
+        undos.push(await markWrite(selectedDate, slot.subjectId as number, slot.id, status))
       }
       pushToast({
         title: `Marked ${markableSlots.length} period${markableSlots.length === 1 ? '' : 's'} ${status}`,

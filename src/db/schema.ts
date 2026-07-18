@@ -256,6 +256,10 @@ export const settings = sqliteTable('settings', {
   // Requires the active semester to have allocated period times.
   classReminders: integer('class_reminders', { mode: 'boolean' }).notNull().default(false),
   classReminderLeadMinutes: integer('class_reminder_lead_minutes').notNull().default(10),
+  // Which view the app opens on: 'today' (the once-a-day check-in, default)
+  // or 'dashboard'. Kept configurable so long-time users can keep the old
+  // Dashboard-first behavior.
+  launchView: text('launch_view').notNull().default('today'),
   currentSemester: text('current_semester').notNull().default(''),
   // JSON-encoded array of NotificationCategory values the user has muted;
   // muted categories are dropped before notifications ever reach the bell.

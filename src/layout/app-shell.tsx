@@ -10,6 +10,7 @@ import {
   Settings,
   GraduationCap,
   NotebookPen,
+  Sun,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlobalSearch } from '@/components/global-search'
@@ -29,7 +30,10 @@ interface NavItem {
 const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }],
+    items: [
+      { to: '/today', label: 'Today', icon: Sun },
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    ],
   },
   {
     label: 'Track',
