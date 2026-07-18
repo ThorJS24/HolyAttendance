@@ -24,12 +24,14 @@ export function SettingsPage() {
     overallMinTarget,
     subjectMinTarget,
     theme,
+    atRiskMarginPp,
     mutedNotificationCategories,
     backupIntervalDays,
     backupDir,
     lastBackupAt,
     setOverallMinTarget,
     setSubjectMinTarget,
+    setAtRiskMarginPp,
     setTheme,
     setMutedNotificationCategories,
     setBackupIntervalDays,
@@ -40,6 +42,7 @@ export function SettingsPage() {
 
   const [overallMinTargetInput, setOverallMinTargetInput] = useState(String(overallMinTarget))
   const [subjectMinTargetInput, setSubjectMinTargetInput] = useState(String(subjectMinTarget))
+  const [atRiskMarginInput, setAtRiskMarginInput] = useState(String(atRiskMarginPp))
   const [intervalInput, setIntervalInput] = useState(String(backupIntervalDays))
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
@@ -121,6 +124,24 @@ export function SettingsPage() {
                 setSubjectMinTarget(clamped)
               }}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="at-risk-margin">At-risk margin (pts)</Label>
+            <Input
+              id="at-risk-margin"
+              type="number"
+              min={0}
+              max={50}
+              className="w-28"
+              value={atRiskMarginInput}
+              onChange={(e) => setAtRiskMarginInput(e.target.value)}
+              onBlur={() => {
+                const clamped = Math.min(50, Math.max(0, Number(atRiskMarginInput) || 0))
+                setAtRiskMarginInput(String(clamped))
+                setAtRiskMarginPp(clamped)
+              }}
+            />
+            <p className="text-xs text-muted-foreground">Warn when within this many points of target. 0 turns it off.</p>
           </div>
         </CardContent>
       </Card>

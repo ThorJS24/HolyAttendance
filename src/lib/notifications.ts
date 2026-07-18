@@ -45,7 +45,7 @@ export interface NotificationHolidayInput {
   type: string
 }
 
-const AT_RISK_MARGIN_PP = 5
+const DEFAULT_AT_RISK_MARGIN_PP = 5
 const UPCOMING_HOLIDAY_WINDOW_DAYS = 14
 
 export interface BuildNotificationsParams {
@@ -54,12 +54,16 @@ export interface BuildNotificationsParams {
   overall: BucketStats
   overallMinTarget: number
   subjectMinTarget: number
+  /** Points above target still flagged "close to target". Defaults to 5;
+   * 0 disables the at-risk band. */
+  atRiskMarginPp?: number
   holidays: NotificationHolidayInput[]
   today: string
 }
 
 export function buildNotifications(params: BuildNotificationsParams): AppNotification[] {
   const { subjects, bySubjectOverall, overall, overallMinTarget, subjectMinTarget, holidays, today } = params
+  const atRiskMarginPp = params.atRiskMarginPp ?? DEFAULT_AT_RISK_MARGIN_PP
   const notifications: AppNotification[] = []
 
   if (overall.percentage !== null && overall.percentage < overallMinTarget) {
@@ -85,13 +89,13 @@ export function buildNotifications(params: BuildNotificationsParams): AppNotific
         title: `${subject.name} is below target`,
         description: `${stats.percentage.toFixed(1)}% attended, target is ${target}%.`,
       })
-    } else if (stats.percentage < target + AT_RISK_MARGIN_PP) {
+    } else if (atRiskMarginPp > 0 && stats.percentage < target + atRiskMarginPp) {
       notifications.push({
         id: `at-risk-${subject.id}`,
         category: 'subject-at-risk',
         severity: 'warning',
         title: `${subject.name} is close to the target`,
-        description: `${stats.percentage.toFixed(1)}% attended — within ${AT_RISK_MARGIN_PP} points of ${target}%.`,
+        description: `${stats.percentage.toFixed(1)}% attended — within ${atRiskMarginPp} points of ${target}%.`,
       })
     }
 

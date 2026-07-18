@@ -110,6 +110,38 @@ describe('buildNotifications', () => {
     })
   })
 
+  it('respects a custom atRiskMarginPp for the at-risk band', () => {
+    const s = subject(1, 'Data Structures')
+    // 82% with target 75: within a 10-pt band (fires) but outside the default
+    // 5-pt band (wouldn't).
+    const notifications = buildNotifications({
+      subjects: [s],
+      bySubjectOverall: new Map([[1, stats(82, 100)]]),
+      overall: stats(82, 100),
+      overallMinTarget: 75,
+      subjectMinTarget: 75,
+      atRiskMarginPp: 10,
+      holidays: [],
+      today: TODAY,
+    })
+    expect(notifications.find((n) => n.id === 'at-risk-1')).toBeTruthy()
+  })
+
+  it('disables the at-risk band entirely when atRiskMarginPp is 0', () => {
+    const s = subject(1, 'Data Structures')
+    const notifications = buildNotifications({
+      subjects: [s],
+      bySubjectOverall: new Map([[1, stats(9, 12)]]), // 75%, would be at-risk by default
+      overall: stats(9, 12),
+      overallMinTarget: 75,
+      subjectMinTarget: 75,
+      atRiskMarginPp: 0,
+      holidays: [],
+      today: TODAY,
+    })
+    expect(notifications.find((n) => n.id === 'at-risk-1')).toBeUndefined()
+  })
+
   it('fires an at-risk warning when within 5 points of the resolved target but not below it', () => {
     const s = subject(1, 'Data Structures')
     const notifications = buildNotifications({

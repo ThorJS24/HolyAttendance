@@ -227,6 +227,10 @@ export const settings = sqliteTable('settings', {
   // takes precedence over this. See resolveSubjectMinTarget() in the
   // attendance engine.
   subjectMinTarget: real('subject_min_target').notNull().default(75),
+  // How many points above target still counts as "at risk" — drives the
+  // amber close-to-target warning (notifications + dashboard color). 0
+  // disables the band entirely.
+  atRiskMarginPp: real('at_risk_margin_pp').notNull().default(5),
   theme: text('theme').notNull().default('system'),
   currentSemester: text('current_semester').notNull().default(''),
   // JSON-encoded array of NotificationCategory values the user has muted;

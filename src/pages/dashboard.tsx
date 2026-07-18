@@ -16,10 +16,10 @@ import { computeProjection, cumulativeAttendanceSeries } from '@/lib/insights'
 import { todayIso } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
 
-function percentColor(percent: number | null, target: number): string {
+function percentColor(percent: number | null, target: number, atRiskMarginPp: number): string {
   if (percent === null) return 'text-muted-foreground'
   if (percent < target) return 'text-destructive'
-  if (percent < target + 5) return 'text-warning'
+  if (atRiskMarginPp > 0 && percent < target + atRiskMarginPp) return 'text-warning'
   return 'text-success'
 }
 
@@ -28,6 +28,7 @@ export function DashboardPage() {
   const currentSemester = useSettingsStore((s) => s.currentSemester)
   const overallMinTarget = useSettingsStore((s) => s.overallMinTarget)
   const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
+  const atRiskMarginPp = useSettingsStore((s) => s.atRiskMarginPp)
   const { holidays, load: loadHolidays } = useHolidaysStore()
   const { slots, load: loadSlots } = useTimetableStore()
 
@@ -115,7 +116,7 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardDescription>Overall attendance</CardDescription>
-            <CardTitle className={cn('text-3xl tabular-nums', percentColor(overall.percentage, overallMinTarget))}>
+            <CardTitle className={cn('text-3xl tabular-nums', percentColor(overall.percentage, overallMinTarget, atRiskMarginPp))}>
               {overall.percentage === null ? '—' : `${overall.percentage.toFixed(1)}%`}
             </CardTitle>
           </CardHeader>
@@ -202,7 +203,7 @@ export function DashboardPage() {
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     <Sparkline values={series} className="hidden sm:block" />
-                    <span className={cn('tabular-nums', percentColor(overallStats.percentage, resolvedTarget))}>
+                    <span className={cn('tabular-nums', percentColor(overallStats.percentage, resolvedTarget, atRiskMarginPp))}>
                       {overallStats.percentage === null ? '—' : `${overallStats.percentage.toFixed(1)}%`}
                     </span>
                   </span>

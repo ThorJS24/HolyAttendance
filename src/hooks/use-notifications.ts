@@ -14,6 +14,7 @@ export function useNotifications(): AppNotification[] {
   const subjects = useSubjectsStore((s) => s.subjects)
   const overallMinTarget = useSettingsStore((s) => s.overallMinTarget)
   const subjectMinTarget = useSettingsStore((s) => s.subjectMinTarget)
+  const atRiskMarginPp = useSettingsStore((s) => s.atRiskMarginPp)
   const currentSemester = useSettingsStore((s) => s.currentSemester)
   const mutedCategories = useSettingsStore((s) => s.mutedNotificationCategories)
   const holidays = useHolidaysStore((s) => s.holidays)
@@ -29,10 +30,11 @@ export function useNotifications(): AppNotification[] {
       overall,
       overallMinTarget,
       subjectMinTarget,
+      atRiskMarginPp,
       holidays,
       today: todayIso(),
     })
     const muted = new Set(mutedCategories)
     return all.filter((n) => !muted.has(n.category))
-  }, [subjects, bySubject, overall, overallMinTarget, subjectMinTarget, holidays, mutedCategories])
+  }, [subjects, bySubject, overall, overallMinTarget, subjectMinTarget, atRiskMarginPp, holidays, mutedCategories])
 }

@@ -3,6 +3,7 @@ import { create } from 'zustand'
 interface SettingsState {
   overallMinTarget: number
   subjectMinTarget: number
+  atRiskMarginPp: number
   currentSemester: string
   theme: string
   mutedNotificationCategories: string[]
@@ -13,6 +14,7 @@ interface SettingsState {
   load: () => Promise<void>
   setOverallMinTarget: (value: number) => Promise<void>
   setSubjectMinTarget: (value: number) => Promise<void>
+  setAtRiskMarginPp: (value: number) => Promise<void>
   setCurrentSemester: (value: string) => Promise<void>
   setTheme: (value: string) => Promise<void>
   setMutedNotificationCategories: (value: string[]) => Promise<void>
@@ -23,6 +25,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set) => ({
   overallMinTarget: 75,
   subjectMinTarget: 75,
+  atRiskMarginPp: 5,
   currentSemester: '',
   theme: 'system',
   mutedNotificationCategories: [],
@@ -36,6 +39,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({
       overallMinTarget: settings.overallMinTarget,
       subjectMinTarget: settings.subjectMinTarget,
+      atRiskMarginPp: settings.atRiskMarginPp,
       currentSemester: settings.currentSemester,
       theme: settings.theme,
       mutedNotificationCategories: settings.mutedNotificationCategories ?? [],
@@ -53,6 +57,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSubjectMinTarget: async (subjectMinTarget) => {
     await window.bunkmate.settings.update({ subjectMinTarget })
     set({ subjectMinTarget })
+  },
+  setAtRiskMarginPp: async (atRiskMarginPp) => {
+    await window.bunkmate.settings.update({ atRiskMarginPp })
+    set({ atRiskMarginPp })
   },
   setCurrentSemester: async (currentSemester) => {
     await window.bunkmate.settings.update({ currentSemester })
