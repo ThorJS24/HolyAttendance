@@ -6,6 +6,7 @@ interface SemestersState {
   loading: boolean
   load: () => Promise<void>
   create: (input: NewSemester) => Promise<Semester>
+  createWithRollover: (input: NewSemester, fromLabel: string) => Promise<Semester>
   update: (id: number, input: SemesterUpdate) => Promise<Semester>
   setArchived: (id: number, archived: boolean) => Promise<Semester>
   /** Rejects with a human-readable message if the semester still has dependents. */
@@ -24,6 +25,14 @@ export const useSemestersStore = create<SemestersState>((set, get) => ({
 
   create: async (input) => {
     const semester = await window.bunkmate.semesters.create(input)
+    set({
+      semesters: [...get().semesters.map((s) => (semester.isActive ? { ...s, isActive: false } : s)), semester],
+    })
+    return semester
+  },
+
+  createWithRollover: async (input, fromLabel) => {
+    const semester = await window.bunkmate.semesters.createWithRollover(input, fromLabel)
     set({
       semesters: [...get().semesters.map((s) => (semester.isActive ? { ...s, isActive: false } : s)), semester],
     })

@@ -33,6 +33,83 @@ export function createSemester(db: AppDatabase, input: NewSemester): Semester {
   return created
 }
 
+export interface RolloverPreview {
+  subjects: { name: string; credits: number; category: string | null }[]
+  slotCount: number
+}
+
+/** What a rollover from `fromLabel` would create, for the confirm screen. */
+export function getRolloverPreview(db: AppDatabase, fromLabel: string): RolloverPreview {
+  const srcSubjects = db.select().from(subjects).where(eq(subjects.semester, fromLabel)).all()
+  const slotCount = db.select().from(timetableSlots).where(eq(timetableSlots.semester, fromLabel)).all().length
+  return {
+    subjects: srcSubjects.map((s) => ({ name: s.name, credits: s.credits, category: s.category })),
+    slotCount,
+  }
+}
+
+/**
+ * Creates a new semester and rolls over ONLY the structure (subjects +
+ * timetable) from `fromLabel`. Because this repo scopes subjects/timetable
+ * to a semester by label rather than a real foreign key, subjects aren't
+ * shared across semesters — so rollover creates BRAND-NEW subject rows
+ * (fresh ids, copied name/credits/faculty/category/color/customMinTarget)
+ * under the new label, and new timetable slots that reference THOSE new
+ * subject ids via an old→new id map. It deliberately does NOT point the new
+ * slots at the old semester's subjects, and copies nothing else: attendance,
+ * holidays, yellow forms, and exams all start empty in a fresh semester.
+ *
+ * The whole copy runs in one transaction so a failure can't leave a
+ * half-populated semester behind. The new semester is inserted inactive
+ * inside the transaction and (if requested) activated afterward through the
+ * normal update path, so the "only one active" bookkeeping isn't duplicated.
+ */
+export function createSemesterWithRollover(db: AppDatabase, input: NewSemester, fromLabel: string): Semester {
+  const created = db.transaction((tx) => {
+    const sem = tx
+      .insert(semesters)
+      .values({ ...input, isActive: false })
+      .returning()
+      .get()
+
+    const idMap = new Map<number, number>()
+    for (const s of tx.select().from(subjects).where(eq(subjects.semester, fromLabel)).all()) {
+      const ns = tx
+        .insert(subjects)
+        .values({
+          name: s.name,
+          semester: sem.label,
+          credits: s.credits,
+          faculty: s.faculty,
+          category: s.category,
+          color: s.color,
+          customMinTarget: s.customMinTarget,
+        })
+        .returning()
+        .get()
+      idMap.set(s.id, ns.id)
+    }
+
+    for (const slot of tx.select().from(timetableSlots).where(eq(timetableSlots.semester, fromLabel)).all()) {
+      tx.insert(timetableSlots)
+        .values({
+          semester: sem.label,
+          day: slot.day,
+          period: slot.period,
+          subjectId: slot.subjectId !== null ? (idMap.get(slot.subjectId) ?? null) : null,
+          type: slot.type,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        })
+        .run()
+    }
+
+    return sem
+  })
+
+  return input.isActive ? updateSemester(db, created.id, { isActive: true }) : created
+}
+
 export function updateSemester(db: AppDatabase, id: number, input: SemesterUpdate): Semester {
   const updated = db
     .update(semesters)

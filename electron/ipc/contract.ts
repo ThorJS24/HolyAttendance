@@ -2,7 +2,13 @@
 // Electron main process. Both `preload.ts` (invoke wrappers) and
 // `register.ts` (ipcMain handlers) are keyed off `IPC_CHANNELS`, so adding an
 // operation means adding one entry here plus one handler + one preload call.
-import type { Semester, NewSemester, SemesterUpdate, SemesterDependents } from '../db/repositories/semesters'
+import type {
+  Semester,
+  NewSemester,
+  SemesterUpdate,
+  SemesterDependents,
+  RolloverPreview,
+} from '../db/repositories/semesters'
 import type { Subject, NewSubject, SubjectUpdate } from '../db/repositories/subjects'
 import type {
   TimetableSlot,
@@ -34,6 +40,8 @@ export const IPC_CHANNELS = {
   semestersUpdate: 'semesters:update',
   semestersSetArchived: 'semesters:setArchived',
   semestersDelete: 'semesters:delete',
+  semestersRolloverPreview: 'semesters:rolloverPreview',
+  semestersCreateWithRollover: 'semesters:createWithRollover',
   semestersGetDependents: 'semesters:getDependents',
 
   subjectsList: 'subjects:list',
@@ -101,6 +109,10 @@ export interface BunkMateApi {
     /** Throws (rejects) with a human-readable message if dependents exist. */
     delete: (id: number) => Promise<void>
     getDependents: (label: string) => Promise<SemesterDependents>
+    /** What a rollover from this semester label would copy. */
+    rolloverPreview: (fromLabel: string) => Promise<RolloverPreview>
+    /** Create a semester, copying subjects + timetable structure from fromLabel. */
+    createWithRollover: (input: NewSemester, fromLabel: string) => Promise<Semester>
   }
 
   subjects: {

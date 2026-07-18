@@ -29,6 +29,12 @@ export function registerIpcHandlers(db: AppDatabase): void {
   ipcMain.handle(IPC_CHANNELS.semestersGetDependents, (_e, label: string) =>
     semestersRepo.getSemesterDependents(db, label),
   )
+  ipcMain.handle(IPC_CHANNELS.semestersRolloverPreview, (_e, fromLabel: string) =>
+    semestersRepo.getRolloverPreview(db, fromLabel),
+  )
+  ipcMain.handle(IPC_CHANNELS.semestersCreateWithRollover, (_e, input, fromLabel: string) =>
+    semestersRepo.createSemesterWithRollover(db, input, fromLabel),
+  )
 
   ipcMain.handle(IPC_CHANNELS.subjectsList, (_e, opts) => subjectsRepo.listSubjects(db, opts))
   ipcMain.handle(IPC_CHANNELS.subjectsGet, (_e, id: number) => subjectsRepo.getSubject(db, id))

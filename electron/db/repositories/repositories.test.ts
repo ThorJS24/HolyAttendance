@@ -508,6 +508,49 @@ describe('semesters repository', () => {
     db = createTestDb()
   })
 
+  it('rolls over subjects + timetable into a NEW semester as independent copies', () => {
+    semestersRepo.createSemester(db, {
+      number: 1, label: '2026-1', startDate: '2026-01-01', endDate: '2026-05-01',
+      periodsPerDay: 7, lunchPeriod: 4, isActive: true,
+    })
+    const ds = subjectsRepo.createSubject(db, { name: 'Data Structures', semester: '2026-1', credits: 4, faculty: 'Dr. A', category: 'core' })
+    timetableSlotsRepo.createTimetableSlot(db, { semester: '2026-1', day: 'mon', period: 1, subjectId: ds.id, type: 'class', startTime: null, endTime: null })
+    timetableSlotsRepo.createTimetableSlot(db, { semester: '2026-1', day: 'mon', period: 4, subjectId: null, type: 'lunch', startTime: null, endTime: null })
+    attendanceRecordsRepo.createAttendanceRecord(db, { subjectId: ds.id, date: '2026-02-01', period: 1, status: 'present', source: 'manual', slotId: null })
+
+    const preview = semestersRepo.getRolloverPreview(db, '2026-1')
+    expect(preview.subjects.map((s) => s.name)).toEqual(['Data Structures'])
+    expect(preview.slotCount).toBe(2)
+
+    const rolled = semestersRepo.createSemesterWithRollover(
+      db,
+      { number: 2, label: '2026-2', startDate: '2026-06-01', endDate: '2026-10-01', periodsPerDay: 7, lunchPeriod: 4, isActive: false },
+      '2026-1',
+    )
+
+    // New subject rows with fresh ids, referenced by the new slots.
+    const newSubjects = subjectsRepo.listSubjects(db, { semester: '2026-2' })
+    expect(newSubjects).toHaveLength(1)
+    const newDs = newSubjects[0]
+    expect(newDs.id).not.toBe(ds.id)
+    expect(newDs.name).toBe('Data Structures')
+    expect(newDs.faculty).toBe('Dr. A')
+
+    const newSlots = timetableSlotsRepo.listTimetableSlots(db, { semester: '2026-2' })
+    expect(newSlots).toHaveLength(2)
+    const newClassSlot = newSlots.find((s) => s.type === 'class')!
+    expect(newClassSlot.subjectId).toBe(newDs.id) // points at the NEW subject, not the old one
+    expect(newClassSlot.subjectId).not.toBe(ds.id)
+
+    // Nothing else copied: attendance stays with the old semester only.
+    expect(attendanceRecordsRepo.listAttendanceRecords(db, { subjectId: newDs.id })).toHaveLength(0)
+
+    // Editing the new subject must not touch the old one (true independence).
+    subjectsRepo.updateSubject(db, newDs.id, { name: 'DS (renamed)' })
+    expect(subjectsRepo.getSubject(db, ds.id)?.name).toBe('Data Structures')
+    expect(rolled.label).toBe('2026-2')
+  })
+
   it('creates, lists, updates, and archives a semester', () => {
     const created = semestersRepo.createSemester(db, {
       number: 1,

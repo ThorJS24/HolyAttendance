@@ -14,11 +14,17 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
 import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
-import type { Semester, NewSemester, SemesterDependents } from '../../electron/db/repositories/semesters'
+import type {
+  Semester,
+  NewSemester,
+  SemesterDependents,
+  RolloverPreview,
+} from '../../electron/db/repositories/semesters'
 
 interface SemesterFormState {
   number: string
@@ -47,7 +53,7 @@ function emptyForm(nextNumber: number): SemesterFormState {
 }
 
 export function SemestersPage() {
-  const { semesters, loading, load, create, update, setArchived, remove } = useSemestersStore()
+  const { semesters, loading, load, create, createWithRollover, update, setArchived, remove } = useSemestersStore()
   const pushToast = useToastStore((s) => s.push)
 
   const [showArchived, setShowArchived] = useState(false)
@@ -55,6 +61,8 @@ export function SemestersPage() {
   const [editing, setEditing] = useState<Semester | null>(null)
   const [form, setForm] = useState<SemesterFormState>(emptyForm(1))
   const [saving, setSaving] = useState(false)
+  const [rolloverFrom, setRolloverFrom] = useState('')
+  const [rolloverPreview, setRolloverPreview] = useState<RolloverPreview | null>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<Semester | null>(null)
   const [dependents, setDependents] = useState<SemesterDependents | null>(null)
@@ -72,8 +80,26 @@ export function SemestersPage() {
     setEditing(null)
     const nextNumber = semesters.length > 0 ? Math.max(...semesters.map((s) => s.number)) + 1 : 1
     setForm(emptyForm(nextNumber))
+    setRolloverFrom('')
+    setRolloverPreview(null)
     setDialogOpen(true)
   }
+
+  // Fetch what a rollover from the chosen source would create, for the
+  // preview shown before the user confirms.
+  useEffect(() => {
+    if (!rolloverFrom) {
+      setRolloverPreview(null)
+      return
+    }
+    let cancelled = false
+    window.bunkmate.semesters.rolloverPreview(rolloverFrom).then((p) => {
+      if (!cancelled) setRolloverPreview(p)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [rolloverFrom])
 
   function openEditDialog(semester: Semester) {
     setEditing(semester)
@@ -107,6 +133,12 @@ export function SemestersPage() {
       if (editing) {
         await update(editing.id, payload)
         pushToast({ title: 'Semester updated' })
+      } else if (rolloverFrom) {
+        await createWithRollover(payload, rolloverFrom)
+        pushToast({
+          title: 'Semester created',
+          description: `Copied ${rolloverPreview?.subjects.length ?? 0} subject(s) and ${rolloverPreview?.slotCount ?? 0} timetable slot(s) from ${rolloverFrom}.`,
+        })
       } else {
         await create(payload)
         pushToast({ title: 'Semester created' })
@@ -358,6 +390,40 @@ export function SemestersPage() {
               />
               <Label htmlFor="is-active">Set as active semester</Label>
             </div>
+
+            {!editing && semesters.length > 0 && (
+              <div className="space-y-2 rounded-md border p-3">
+                <Label htmlFor="rollover-from">Copy structure from (optional)</Label>
+                <Select value={rolloverFrom || 'none'} onValueChange={(v) => setRolloverFrom(v === 'none' ? '' : v)}>
+                  <SelectTrigger id="rollover-from">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Start empty</SelectItem>
+                    {semesters
+                      .slice()
+                      .sort((a, b) => b.number - a.number)
+                      .map((s) => (
+                        <SelectItem key={s.id} value={s.label}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {rolloverPreview && (
+                  <div className="text-xs text-muted-foreground">
+                    <p>
+                      Copies <b>{rolloverPreview.subjects.length}</b> subject(s) as fresh rows and{' '}
+                      <b>{rolloverPreview.slotCount}</b> timetable slot(s). Attendance, holidays, yellow forms, and
+                      exams are <b>not</b> copied — this semester starts with a clean slate.
+                    </p>
+                    {rolloverPreview.subjects.length > 0 && (
+                      <p className="mt-1 truncate">{rolloverPreview.subjects.map((s) => s.name).join(', ')}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

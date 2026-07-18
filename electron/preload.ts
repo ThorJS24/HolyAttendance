@@ -14,6 +14,9 @@ const api: BunkMateApi = {
     setArchived: (id, archived) => ipcRenderer.invoke(IPC_CHANNELS.semestersSetArchived, id, archived),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.semestersDelete, id),
     getDependents: (label) => ipcRenderer.invoke(IPC_CHANNELS.semestersGetDependents, label),
+    rolloverPreview: (fromLabel) => ipcRenderer.invoke(IPC_CHANNELS.semestersRolloverPreview, fromLabel),
+    createWithRollover: (input, fromLabel) =>
+      ipcRenderer.invoke(IPC_CHANNELS.semestersCreateWithRollover, input, fromLabel),
   },
 
   subjects: {
