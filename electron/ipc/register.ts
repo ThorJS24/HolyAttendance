@@ -1,6 +1,7 @@
 import { ipcMain, dialog, app } from 'electron'
 import fs from 'node:fs'
 import { extractPdfText } from '../pdf-text'
+import { getEsproStatus, saveEsproCredential, removeEsproCredential } from '../espro/credential-store'
 import type { AppDatabase } from '../db/client'
 import { IPC_CHANNELS } from './contract'
 import { backupNow, restoreFrom, defaultBackupFileName } from '../backup'
@@ -183,4 +184,10 @@ export function registerIpcHandlers(db: AppDatabase): void {
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
   })
+
+  ipcMain.handle(IPC_CHANNELS.esproGetStatus, () => getEsproStatus(app.getPath('userData')))
+  ipcMain.handle(IPC_CHANNELS.esproSaveCredential, (_e, input: { username: string; password: string }) =>
+    saveEsproCredential(app.getPath('userData'), input),
+  )
+  ipcMain.handle(IPC_CHANNELS.esproRemoveCredential, () => removeEsproCredential(app.getPath('userData')))
 }
