@@ -3,7 +3,7 @@ import { WEEKDAYS, type Weekday, type PeriodTime } from '@/db/schema'
 import type { TimetableSlot } from '../../electron/db/repositories/timetable-slots'
 import type { Subject } from '../../electron/db/repositories/subjects'
 import { computeWeekShape } from '@/lib/timetable-week-shape'
-import { categoricalColor } from '@/lib/chart-colors'
+import { resolveSubjectColor } from '@/lib/chart-colors'
 import { cn } from '@/lib/utils'
 
 const DAY_LABELS: Record<Weekday, string> = {
@@ -43,11 +43,11 @@ export function TimetableWeekGlance({
     [slots, periodTimeByPeriod],
   )
 
-  // Stable color per subject (by id order) so the same subject always reads
-  // the same color here, matching how Analytics colors subjects.
+  // A subject's own chosen color if set, else a stable palette slot by id
+  // order — matching how Analytics colors subjects.
   const colorBySubjectId = useMemo(() => {
     const sorted = [...subjects].sort((a, b) => a.id - b.id)
-    return new Map(sorted.map((s, i) => [s.id, categoricalColor(i)]))
+    return new Map(sorted.map((s, i) => [s.id, resolveSubjectColor(s.color, i)]))
   }, [subjects])
 
   const slotAt = useMemo(() => {

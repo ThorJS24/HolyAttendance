@@ -20,6 +20,30 @@ export function categoricalColor(index: number): string {
   return CHART_CATEGORICAL[index % CHART_CATEGORICAL.length]
 }
 
+// Concrete hex swatches offered in the subject color picker. Kept as literal
+// hexes (not the var(--chart-*) tokens) because a stored subject.color has to
+// be a fixed value — it can't resolve a CSS variable at rest — and these are
+// the light-theme reference hexes of the validated categorical palette.
+export const SUBJECT_COLOR_SWATCHES = [
+  '#2a78d6',
+  '#008300',
+  '#e87ba4',
+  '#eda100',
+  '#1baf7a',
+  '#eb6834',
+  '#4a3aa7',
+  '#e34948',
+]
+
+/**
+ * The color to draw a subject in: its own chosen `color` if set, otherwise the
+ * palette slot for its position. One place so Week overview and Analytics
+ * never disagree about a subject's color.
+ */
+export function resolveSubjectColor(color: string | null | undefined, fallbackIndex: number): string {
+  return color ?? categoricalColor(fallbackIndex)
+}
+
 /** Sequential blue ramp, light -> dark, for magnitude encoding (the heatmap). */
 export const CHART_SEQUENTIAL = ['var(--chart-seq-1)', 'var(--chart-seq-2)', 'var(--chart-seq-3)', 'var(--chart-seq-4)']
 

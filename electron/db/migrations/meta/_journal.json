@@ -57,6 +57,13 @@
       "when": 1784347423217,
       "tag": "0007_add_muted_notification_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1784348308141,
+      "tag": "0008_add_subject_color",
+      "breakpoints": true
     }
   ]
 }

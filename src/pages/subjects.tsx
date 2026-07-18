@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Archive, ArchiveRestore, Trash2, History, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
 import {
   Dialog,
@@ -22,7 +23,10 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
 import { useHotkey } from '@/hooks/use-hotkey'
+import { SUBJECT_COLOR_SWATCHES } from '@/lib/chart-colors'
+import { cn } from '@/lib/utils'
 import type { Subject, NewSubject } from '../../electron/db/repositories/subjects'
+import type { AttendanceRecord } from '../../electron/db/repositories/attendance-records'
 
 const CATEGORIES = ['core', 'elective', 'lab', 'other']
 
@@ -34,10 +38,20 @@ interface SubjectFormState {
   category: string
   /** Blank means "inherit the default subject minimum" (customMinTarget: null). */
   customMinTarget: string
+  /** Empty means "use the palette slot" (color: null). */
+  color: string
 }
 
 function emptyForm(defaultSemester: string): SubjectFormState {
-  return { name: '', semester: defaultSemester, credits: '3', faculty: '', category: 'core', customMinTarget: '' }
+  return {
+    name: '',
+    semester: defaultSemester,
+    credits: '3',
+    faculty: '',
+    category: 'core',
+    customMinTarget: '',
+    color: '',
+  }
 }
 
 export function SubjectsPage() {
@@ -54,6 +68,9 @@ export function SubjectsPage() {
   const [form, setForm] = useState<SubjectFormState>(emptyForm(currentSemester))
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null)
   const [saving, setSaving] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [historySubject, setHistorySubject] = useState<Subject | null>(null)
+  const [historyRecords, setHistoryRecords] = useState<AttendanceRecord[] | null>(null)
 
   useEffect(() => {
     load({ includeArchived: true })
@@ -90,8 +107,52 @@ export function SubjectsPage() {
       faculty: subject.faculty ?? '',
       category: subject.category ?? 'core',
       customMinTarget: subject.customMinTarget === null ? '' : String(subject.customMinTarget),
+      color: subject.color ?? '',
     })
     setDialogOpen(true)
+  }
+
+  async function openHistory(subject: Subject) {
+    setHistorySubject(subject)
+    setHistoryRecords(null)
+    const records = await window.bunkmate.attendanceRecords.list({ subjectId: subject.id })
+    setHistoryRecords(records)
+  }
+
+  // Selection is scoped to what's currently visible — a filter change that
+  // hides a selected row shouldn't leave it acted on by a bulk button.
+  const visibleIds = useMemo(() => visibleSubjects.map((s) => s.id), [visibleSubjects])
+  const selectedVisible = useMemo(
+    () => visibleSubjects.filter((s) => selectedIds.has(s.id)),
+    [visibleSubjects, selectedIds],
+  )
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id))
+      else visibleIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function bulkArchive(archived: boolean) {
+    const targets = selectedVisible.filter((s) => s.archived !== archived)
+    for (const s of targets) await setArchived(s.id, archived)
+    setSelectedIds(new Set())
+    pushToast({
+      title: `${archived ? 'Archived' : 'Restored'} ${targets.length} subject${targets.length === 1 ? '' : 's'}`,
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -108,6 +169,7 @@ export function SubjectsPage() {
         category: form.category || null,
         customMinTarget:
           form.customMinTarget.trim() === '' ? null : Math.min(100, Math.max(0, Number(form.customMinTarget))),
+        color: form.color || null,
       }
       if (editing) {
         await update(editing.id, payload)
@@ -170,11 +232,34 @@ export function SubjectsPage() {
         </div>
       </div>
 
+      {selectedVisible.length > 0 && (
+        <div className="flex items-center gap-3 rounded-md border bg-accent/40 px-3 py-2 text-sm">
+          <span className="font-medium">{selectedVisible.length} selected</span>
+          <Button size="sm" variant="outline" onClick={() => bulkArchive(true)}>
+            <Archive /> Archive
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => bulkArchive(false)}>
+            <ArchiveRestore /> Restore
+          </Button>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setSelectedIds(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                    disabled={visibleIds.length === 0}
+                  />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Semester</TableHead>
                 <TableHead>Credits</TableHead>
@@ -187,22 +272,37 @@ export function SubjectsPage() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <Spinner className="mx-auto" />
                   </TableCell>
                 </TableRow>
               )}
               {visibleSubjects.length === 0 && !loading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No subjects yet.
                   </TableCell>
                 </TableRow>
               )}
               {!loading &&
                 visibleSubjects.map((subject) => (
-                <TableRow key={subject.id}>
-                  <TableCell className="font-medium">{subject.name}</TableCell>
+                <TableRow key={subject.id} data-state={selectedIds.has(subject.id) ? 'selected' : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(subject.id)}
+                      onCheckedChange={() => toggleSelect(subject.id)}
+                      aria-label={`Select ${subject.name}`}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full border"
+                        style={{ backgroundColor: subject.color ?? 'var(--muted)' }}
+                      />
+                      {subject.name}
+                    </span>
+                  </TableCell>
                   <TableCell>{subject.semester}</TableCell>
                   <TableCell>{subject.credits}</TableCell>
                   <TableCell>{subject.faculty ?? '—'}</TableCell>
@@ -216,6 +316,15 @@ export function SubjectsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => openHistory(subject)}
+                        aria-label="Attendance history"
+                        title="Attendance history"
+                      >
+                        <History />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => openEditDialog(subject)} aria-label="Edit">
                         <Pencil />
                       </Button>
@@ -333,6 +442,36 @@ export function SubjectsPage() {
                 placeholder={`Default: ${subjectMinTarget}%`}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  title="Default (palette)"
+                  aria-label="Default color"
+                  onClick={() => setForm({ ...form, color: '' })}
+                  className={cn(
+                    'flex size-6 items-center justify-center rounded-full border text-muted-foreground',
+                    form.color === '' && 'ring-2 ring-ring ring-offset-1',
+                  )}
+                >
+                  <X className="size-3" />
+                </button>
+                {SUBJECT_COLOR_SWATCHES.map((swatch) => (
+                  <button
+                    key={swatch}
+                    type="button"
+                    aria-label={`Color ${swatch}`}
+                    onClick={() => setForm({ ...form, color: swatch })}
+                    style={{ backgroundColor: swatch }}
+                    className={cn(
+                      'size-6 rounded-full border',
+                      form.color === swatch && 'ring-2 ring-ring ring-offset-1',
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -361,6 +500,42 @@ export function SubjectsPage() {
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historySubject !== null} onOpenChange={(open) => !open && setHistorySubject(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{historySubject?.name} — attendance history</DialogTitle>
+            <DialogDescription>
+              {historyRecords === null
+                ? 'Loading…'
+                : historyRecords.length === 0
+                  ? 'No attendance recorded for this subject yet.'
+                  : `${historyRecords.filter((r) => r.status === 'present').length} present · ${historyRecords.filter((r) => r.status === 'absent').length} absent · ${historyRecords.length} total`}
+            </DialogDescription>
+          </DialogHeader>
+          {historyRecords !== null && historyRecords.length > 0 && (
+            <div className="max-h-80 space-y-1 overflow-y-auto">
+              {[...historyRecords]
+                .sort((a, b) => (a.date === b.date ? b.period - a.period : a.date < b.date ? 1 : -1))
+                .map((r) => (
+                  <div key={r.id} className="flex items-center justify-between rounded-md border px-3 py-1.5 text-sm">
+                    <span className="tabular-nums text-muted-foreground">
+                      {r.date} · P{r.period}
+                    </span>
+                    <Badge variant={r.status === 'present' ? 'success' : 'destructive'} className="capitalize">
+                      {r.status}
+                    </Badge>
+                  </div>
+                ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistorySubject(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

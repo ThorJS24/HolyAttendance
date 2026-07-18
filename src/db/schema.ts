@@ -93,6 +93,10 @@ export const subjects = sqliteTable('subjects', {
   // the default subject minimum" — resolved via resolveSubjectMinTarget()
   // in the attendance engine, never read as a bare column value elsewhere.
   customMinTarget: real('custom_min_target'),
+  // Optional user-chosen accent (hex) used wherever a subject is drawn as a
+  // color — Week overview strips, Analytics series. Null means "fall back to
+  // the palette slot for this subject's position" (see resolveSubjectColor).
+  color: text('color'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),

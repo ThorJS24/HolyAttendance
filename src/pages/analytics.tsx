@@ -35,7 +35,7 @@ import {
   computeWeekdayAttendance,
   type TrendGranularity,
 } from '@/lib/attendance-trend'
-import { categoricalColor, sequentialColor } from '@/lib/chart-colors'
+import { resolveSubjectColor, sequentialColor } from '@/lib/chart-colors'
 import { buildSubjectRows, exportReport, type ReportFormat } from '@/lib/report-export'
 import { scopeRecordsToSubjects } from '@/lib/semester-scope'
 import { useToastStore } from '@/store/toast-store'
@@ -153,9 +153,11 @@ export function AnalyticsPage() {
       subjectRows.map((row, i) => ({
         name: row.name,
         percentage: row.percentage ?? 0,
-        fill: categoricalColor(i),
+        // subjectRows is built from currentSemesterSubjects in the same order,
+        // so index i lines up with the subject whose chosen color to prefer.
+        fill: resolveSubjectColor(currentSemesterSubjects[i]?.color, i),
       })),
-    [subjectRows],
+    [subjectRows, currentSemesterSubjects],
   )
 
   const trend = useMemo(
