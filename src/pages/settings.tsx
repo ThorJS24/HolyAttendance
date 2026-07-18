@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -16,18 +17,21 @@ import {
 } from '@/components/ui/dialog'
 import { useSettingsStore } from '@/store/settings-store'
 import { useToastStore } from '@/store/toast-store'
+import { NOTIFICATION_CATEGORY_LABELS, type NotificationCategory } from '@/lib/notifications'
 
 export function SettingsPage() {
   const {
     overallMinTarget,
     subjectMinTarget,
     theme,
+    mutedNotificationCategories,
     backupIntervalDays,
     backupDir,
     lastBackupAt,
     setOverallMinTarget,
     setSubjectMinTarget,
     setTheme,
+    setMutedNotificationCategories,
     setBackupIntervalDays,
     setBackupDir,
     load,
@@ -153,6 +157,38 @@ export function SettingsPage() {
               </SelectContent>
             </Select>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Notifications</CardTitle>
+          <CardDescription>
+            Turn off any alert category you don't want in the bell. Muted categories stop appearing entirely;
+            dismissing or marking individual alerts read is done from the bell itself.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(Object.keys(NOTIFICATION_CATEGORY_LABELS) as NotificationCategory[]).map((category) => {
+            const muted = mutedNotificationCategories.includes(category)
+            return (
+              <div key={category} className="flex items-center justify-between">
+                <Label htmlFor={`notif-${category}`} className="font-normal">
+                  {NOTIFICATION_CATEGORY_LABELS[category]}
+                </Label>
+                <Switch
+                  id={`notif-${category}`}
+                  checked={!muted}
+                  onCheckedChange={(enabled) => {
+                    const next = enabled
+                      ? mutedNotificationCategories.filter((c) => c !== category)
+                      : [...mutedNotificationCategories, category]
+                    setMutedNotificationCategories(next)
+                  }}
+                />
+              </div>
+            )
+          })}
         </CardContent>
       </Card>
 

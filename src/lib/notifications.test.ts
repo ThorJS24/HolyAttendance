@@ -29,6 +29,7 @@ describe('buildNotifications', () => {
 
     expect(notifications).toContainEqual({
       id: 'overall-below-target',
+      category: 'overall-below',
       severity: 'critical',
       title: 'Overall attendance is below target',
       description: '60.0% attended, target is 80%.',
@@ -63,6 +64,7 @@ describe('buildNotifications', () => {
 
     expect(notifications).toContainEqual({
       id: 'below-target-1',
+      category: 'subject-below',
       severity: 'critical',
       title: 'Operating Systems is below target',
       description: '60.0% attended, target is 75%.',
@@ -101,6 +103,7 @@ describe('buildNotifications', () => {
 
     expect(notifications2).toContainEqual({
       id: 'below-target-2',
+      category: 'subject-below',
       severity: 'critical',
       title: 'Networks is below target',
       description: '80.0% attended, target is 90%.',
@@ -121,6 +124,7 @@ describe('buildNotifications', () => {
 
     expect(notifications).toContainEqual({
       id: 'at-risk-1',
+      category: 'subject-at-risk',
       severity: 'warning',
       title: 'Data Structures is close to the target',
       description: '75.0% attended — within 5 points of 75%.',
@@ -141,6 +145,7 @@ describe('buildNotifications', () => {
 
     expect(notifications).toContainEqual({
       id: 'safe-bunk-zero-1',
+      category: 'safe-bunk',
       severity: 'warning',
       title: 'Data Structures has no safe bunks left',
       description: 'Missing the next class would drop you below target.',

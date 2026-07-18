@@ -6,8 +6,27 @@ import { computeSafeBunkCount, resolveSubjectMinTarget, type BucketStats } from 
 
 export type NotificationSeverity = 'critical' | 'warning' | 'info'
 
+// Coarse grouping used for muting: a user can silence a whole category (e.g.
+// "stop the at-risk warnings") without losing the others. Every notification
+// carries exactly one.
+export type NotificationCategory =
+  | 'overall-below'
+  | 'subject-below'
+  | 'subject-at-risk'
+  | 'safe-bunk'
+  | 'holiday'
+
+export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> = {
+  'overall-below': 'Overall below target',
+  'subject-below': 'Subject below target',
+  'subject-at-risk': 'Subject close to target',
+  'safe-bunk': 'No safe bunks left',
+  holiday: 'Upcoming holidays',
+}
+
 export interface AppNotification {
   id: string
+  category: NotificationCategory
   severity: NotificationSeverity
   title: string
   description: string
@@ -46,6 +65,7 @@ export function buildNotifications(params: BuildNotificationsParams): AppNotific
   if (overall.percentage !== null && overall.percentage < overallMinTarget) {
     notifications.push({
       id: 'overall-below-target',
+      category: 'overall-below',
       severity: 'critical',
       title: 'Overall attendance is below target',
       description: `${overall.percentage.toFixed(1)}% attended, target is ${overallMinTarget}%.`,
@@ -60,6 +80,7 @@ export function buildNotifications(params: BuildNotificationsParams): AppNotific
     if (stats.percentage < target) {
       notifications.push({
         id: `below-target-${subject.id}`,
+        category: 'subject-below',
         severity: 'critical',
         title: `${subject.name} is below target`,
         description: `${stats.percentage.toFixed(1)}% attended, target is ${target}%.`,
@@ -67,6 +88,7 @@ export function buildNotifications(params: BuildNotificationsParams): AppNotific
     } else if (stats.percentage < target + AT_RISK_MARGIN_PP) {
       notifications.push({
         id: `at-risk-${subject.id}`,
+        category: 'subject-at-risk',
         severity: 'warning',
         title: `${subject.name} is close to the target`,
         description: `${stats.percentage.toFixed(1)}% attended — within ${AT_RISK_MARGIN_PP} points of ${target}%.`,
@@ -77,6 +99,7 @@ export function buildNotifications(params: BuildNotificationsParams): AppNotific
     if (safeBunks === 0 && stats.percentage >= target) {
       notifications.push({
         id: `safe-bunk-zero-${subject.id}`,
+        category: 'safe-bunk',
         severity: 'warning',
         title: `${subject.name} has no safe bunks left`,
         description: 'Missing the next class would drop you below target.',
@@ -93,6 +116,7 @@ export function buildNotifications(params: BuildNotificationsParams): AppNotific
     if (daysAway <= UPCOMING_HOLIDAY_WINDOW_DAYS) {
       notifications.push({
         id: `holiday-${holiday.id}`,
+        category: 'holiday',
         severity: 'info',
         title: holiday.label ?? 'Upcoming holiday',
         description: daysAway === 0 ? 'Today' : `In ${daysAway} day${daysAway === 1 ? '' : 's'} (${holiday.date})`,

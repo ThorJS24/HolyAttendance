@@ -225,6 +225,15 @@ export const settings = sqliteTable('settings', {
   subjectMinTarget: real('subject_min_target').notNull().default(75),
   theme: text('theme').notNull().default('system'),
   currentSemester: text('current_semester').notNull().default(''),
+  // JSON-encoded array of NotificationCategory values the user has muted;
+  // muted categories are dropped before notifications ever reach the bell.
+  // Read/dismissed state for individual alerts is NOT here — that's ephemeral
+  // view state kept in localStorage (see notification-state-store.ts), since
+  // notifications are derived live and regenerate.
+  mutedNotificationCategories: text('muted_notification_categories', { mode: 'json' })
+    .$type<string[]>()
+    .notNull()
+    .default([]),
   backupIntervalDays: integer('backup_interval_days').notNull().default(7),
   backupDir: text('backup_dir'),
   lastBackupAt: integer('last_backup_at', { mode: 'timestamp' }),

@@ -5,6 +5,7 @@ interface SettingsState {
   subjectMinTarget: number
   currentSemester: string
   theme: string
+  mutedNotificationCategories: string[]
   backupIntervalDays: number
   backupDir: string | null
   lastBackupAt: Date | null
@@ -14,6 +15,7 @@ interface SettingsState {
   setSubjectMinTarget: (value: number) => Promise<void>
   setCurrentSemester: (value: string) => Promise<void>
   setTheme: (value: string) => Promise<void>
+  setMutedNotificationCategories: (value: string[]) => Promise<void>
   setBackupIntervalDays: (value: number) => Promise<void>
   setBackupDir: (value: string | null) => Promise<void>
 }
@@ -23,6 +25,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   subjectMinTarget: 75,
   currentSemester: '',
   theme: 'system',
+  mutedNotificationCategories: [],
   backupIntervalDays: 7,
   backupDir: null,
   lastBackupAt: null,
@@ -35,6 +38,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       subjectMinTarget: settings.subjectMinTarget,
       currentSemester: settings.currentSemester,
       theme: settings.theme,
+      mutedNotificationCategories: settings.mutedNotificationCategories ?? [],
       backupIntervalDays: settings.backupIntervalDays,
       backupDir: settings.backupDir ?? null,
       lastBackupAt: settings.lastBackupAt ?? null,
@@ -57,6 +61,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setTheme: async (theme) => {
     await window.bunkmate.settings.update({ theme })
     set({ theme })
+  },
+  setMutedNotificationCategories: async (mutedNotificationCategories) => {
+    await window.bunkmate.settings.update({ mutedNotificationCategories })
+    set({ mutedNotificationCategories })
   },
   setBackupIntervalDays: async (backupIntervalDays) => {
     await window.bunkmate.settings.update({ backupIntervalDays })
