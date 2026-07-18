@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FolderOpen, Save, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useSettingsStore } from '@/store/settings-store'
+import { useSemestersStore } from '@/store/semesters-store'
 import { useToastStore } from '@/store/toast-store'
 import { NOTIFICATION_CATEGORY_LABELS, type NotificationCategory } from '@/lib/notifications'
 
@@ -27,6 +28,9 @@ export function SettingsPage() {
     density,
     atRiskMarginPp,
     mutedNotificationCategories,
+    classReminders,
+    classReminderLeadMinutes,
+    currentSemester,
     backupIntervalDays,
     backupDir,
     lastBackupAt,
@@ -36,15 +40,29 @@ export function SettingsPage() {
     setTheme,
     setDensity,
     setMutedNotificationCategories,
+    setClassReminders,
+    setClassReminderLeadMinutes,
     setBackupIntervalDays,
     setBackupDir,
     load,
   } = useSettingsStore()
   const pushToast = useToastStore((s) => s.push)
 
+  const semesters = useSemestersStore((s) => s.semesters)
+  const loadSemesters = useSemestersStore((s) => s.load)
+  useEffect(() => {
+    loadSemesters()
+  }, [loadSemesters])
+  // Reminders need real clock times, which come from Grid Settings'
+  // auto-allocate. If the active semester has none, the feature can't work,
+  // so it's disabled with an explanation rather than silently doing nothing.
+  const activeSemesterHasTimes =
+    (semesters.find((s) => s.label === currentSemester)?.periodTimes?.length ?? 0) > 0
+
   const [overallMinTargetInput, setOverallMinTargetInput] = useState(String(overallMinTarget))
   const [subjectMinTargetInput, setSubjectMinTargetInput] = useState(String(subjectMinTarget))
   const [atRiskMarginInput, setAtRiskMarginInput] = useState(String(atRiskMarginPp))
+  const [leadInput, setLeadInput] = useState(String(classReminderLeadMinutes))
   const [intervalInput, setIntervalInput] = useState(String(backupIntervalDays))
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
@@ -224,6 +242,52 @@ export function SettingsPage() {
               </div>
             )
           })}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Class reminders</CardTitle>
+          <CardDescription>
+            A desktop notification before each class starts. Only fires while BunkMate is running — it isn't a
+            background service, so nothing is sent when the app is closed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!activeSemesterHasTimes ? (
+            <p className="text-sm text-muted-foreground">
+              Reminders need real class times. Set them first with{' '}
+              <span className="font-medium">Auto-allocate times</span> in the Timetable's Grid settings for the
+              active semester, then this option unlocks.
+            </p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="class-reminders" className="font-normal">
+                  Remind me before class
+                </Label>
+                <Switch id="class-reminders" checked={classReminders} onCheckedChange={setClassReminders} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reminder-lead">Lead time (minutes)</Label>
+                <Input
+                  id="reminder-lead"
+                  type="number"
+                  min={1}
+                  max={120}
+                  className="w-28"
+                  value={leadInput}
+                  disabled={!classReminders}
+                  onChange={(e) => setLeadInput(e.target.value)}
+                  onBlur={() => {
+                    const clamped = Math.min(120, Math.max(1, Number(leadInput) || 10))
+                    setLeadInput(String(clamped))
+                    setClassReminderLeadMinutes(clamped)
+                  }}
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

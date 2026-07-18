@@ -4,6 +4,13 @@ import { initDb, closeDb, getDbPath } from './db/client'
 import { registerIpcHandlers } from './ipc/register'
 import { settingsRepo, periodTypeRulesRepo, semestersRepo } from './db/repositories'
 import { runScheduledBackupIfDue } from './backup'
+import { startClassReminders } from './reminders'
+
+// Windows shows native notifications under this identity; without it, toasts
+// from a dev/unsigned build may be suppressed or mis-attributed.
+if (process.platform === 'win32') app.setAppUserModelId('com.bunkmate.pro')
+
+let stopReminders: (() => void) | null = null
 
 // Populated by vite-plugin-electron during `npm run dev`.
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -60,6 +67,7 @@ app.whenReady().then(() => {
   semestersRepo.ensureSemestersSeeded(db)
   registerIpcHandlers(db)
   runScheduledBackupIfDue(db)
+  stopReminders = startClassReminders(db)
   createWindow()
 
   app.on('activate', () => {
@@ -68,6 +76,8 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  stopReminders?.()
+  stopReminders = null
   closeDb()
   if (process.platform !== 'darwin') app.quit()
 })

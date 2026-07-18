@@ -251,6 +251,11 @@ export const settings = sqliteTable('settings', {
   // 'comfortable' (default) or 'compact' — compact tightens global spacing
   // and control heights for users tracking many subjects on one screen.
   density: text('density').notNull().default('comfortable'),
+  // Class-start reminders (Part C): a native notification this many minutes
+  // before each period, fired by the main process WHILE THE APP IS RUNNING.
+  // Requires the active semester to have allocated period times.
+  classReminders: integer('class_reminders', { mode: 'boolean' }).notNull().default(false),
+  classReminderLeadMinutes: integer('class_reminder_lead_minutes').notNull().default(10),
   currentSemester: text('current_semester').notNull().default(''),
   // JSON-encoded array of NotificationCategory values the user has muted;
   // muted categories are dropped before notifications ever reach the bell.

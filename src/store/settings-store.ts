@@ -7,6 +7,8 @@ interface SettingsState {
   currentSemester: string
   theme: string
   density: string
+  classReminders: boolean
+  classReminderLeadMinutes: number
   mutedNotificationCategories: string[]
   backupIntervalDays: number
   backupDir: string | null
@@ -19,6 +21,8 @@ interface SettingsState {
   setCurrentSemester: (value: string) => Promise<void>
   setTheme: (value: string) => Promise<void>
   setDensity: (value: string) => Promise<void>
+  setClassReminders: (value: boolean) => Promise<void>
+  setClassReminderLeadMinutes: (value: number) => Promise<void>
   setMutedNotificationCategories: (value: string[]) => Promise<void>
   setBackupIntervalDays: (value: number) => Promise<void>
   setBackupDir: (value: string | null) => Promise<void>
@@ -31,6 +35,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   currentSemester: '',
   theme: 'system',
   density: 'comfortable',
+  classReminders: false,
+  classReminderLeadMinutes: 10,
   mutedNotificationCategories: [],
   backupIntervalDays: 7,
   backupDir: null,
@@ -46,6 +52,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       currentSemester: settings.currentSemester,
       theme: settings.theme,
       density: settings.density,
+      classReminders: settings.classReminders,
+      classReminderLeadMinutes: settings.classReminderLeadMinutes,
       mutedNotificationCategories: settings.mutedNotificationCategories ?? [],
       backupIntervalDays: settings.backupIntervalDays,
       backupDir: settings.backupDir ?? null,
@@ -77,6 +85,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setDensity: async (density) => {
     await window.bunkmate.settings.update({ density })
     set({ density })
+  },
+  setClassReminders: async (classReminders) => {
+    await window.bunkmate.settings.update({ classReminders })
+    set({ classReminders })
+  },
+  setClassReminderLeadMinutes: async (classReminderLeadMinutes) => {
+    await window.bunkmate.settings.update({ classReminderLeadMinutes })
+    set({ classReminderLeadMinutes })
   },
   setMutedNotificationCategories: async (mutedNotificationCategories) => {
     await window.bunkmate.settings.update({ mutedNotificationCategories })

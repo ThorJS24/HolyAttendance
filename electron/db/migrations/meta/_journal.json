@@ -85,6 +85,13 @@
       "when": 1784350218745,
       "tag": "0011_add_exams",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784351433001,
+      "tag": "0012_add_class_reminders",
+      "breakpoints": true
     }
   ]
 }
