@@ -9,6 +9,7 @@ import {
   Wand2,
   Settings,
   GraduationCap,
+  NotebookPen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlobalSearch } from '@/components/global-search'
@@ -37,6 +38,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
       { to: '/timetable', label: 'Timetable', icon: Table2 },
       { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+      { to: '/exams', label: 'Exams', icon: NotebookPen },
     ],
   },
   {

@@ -9,6 +9,7 @@ import {
   timetableSlotsRepo,
   attendanceRecordsRepo,
   holidaysRepo,
+  examsRepo,
   leavePlansRepo,
   yellowFormsRepo,
   settingsRepo,
@@ -72,6 +73,11 @@ export function registerIpcHandlers(db: AppDatabase): void {
     holidaysRepo.updateHoliday(db, id, input),
   )
   ipcMain.handle(IPC_CHANNELS.holidaysDelete, (_e, id: number) => holidaysRepo.deleteHoliday(db, id))
+
+  ipcMain.handle(IPC_CHANNELS.examsList, (_e, opts) => examsRepo.listExams(db, opts))
+  ipcMain.handle(IPC_CHANNELS.examsCreate, (_e, input) => examsRepo.createExam(db, input))
+  ipcMain.handle(IPC_CHANNELS.examsUpdate, (_e, id: number, input) => examsRepo.updateExam(db, id, input))
+  ipcMain.handle(IPC_CHANNELS.examsDelete, (_e, id: number) => examsRepo.deleteExam(db, id))
 
   ipcMain.handle(IPC_CHANNELS.leavePlansList, () => leavePlansRepo.listLeavePlans(db))
   ipcMain.handle(IPC_CHANNELS.leavePlansCreate, (_e, input) => leavePlansRepo.createLeavePlan(db, input))

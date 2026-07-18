@@ -25,3 +25,23 @@ export function nextDayIso(dateIso: string): string {
   d.setUTCDate(d.getUTCDate() + 1)
   return d.toISOString().slice(0, 10)
 }
+
+/**
+ * Whole calendar days from today until `dateIso` (UTC-anchored, matching how
+ * dates are stored). 0 = today, positive = future, negative = past.
+ */
+export function daysUntil(dateIso: string): number {
+  const target = new Date(`${dateIso}T00:00:00Z`).getTime()
+  const today = new Date(`${todayIso()}T00:00:00Z`).getTime()
+  return Math.round((target - today) / (24 * 60 * 60 * 1000))
+}
+
+/** Human "in N days" / "today" / "tomorrow" / "N days ago" for a countdown. */
+export function countdownLabel(dateIso: string): string {
+  const d = daysUntil(dateIso)
+  if (d === 0) return 'Today'
+  if (d === 1) return 'Tomorrow'
+  if (d === -1) return 'Yesterday'
+  if (d > 0) return `in ${d} days`
+  return `${-d} days ago`
+}

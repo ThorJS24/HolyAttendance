@@ -46,6 +46,13 @@ const api: BunkMateApi = {
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.holidaysDelete, id),
   },
 
+  exams: {
+    list: (opts) => ipcRenderer.invoke(IPC_CHANNELS.examsList, opts),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.examsCreate, input),
+    update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.examsUpdate, id, input),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.examsDelete, id),
+  },
+
   leavePlans: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.leavePlansList),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.leavePlansCreate, input),

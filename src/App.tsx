@@ -20,6 +20,7 @@ const PlannerPage = lazy(() => import('@/pages/planner').then((m) => ({ default:
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then((m) => ({ default: m.AnalyticsPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then((m) => ({ default: m.SettingsPage })))
 const SemestersPage = lazy(() => import('@/pages/semesters').then((m) => ({ default: m.SemestersPage })))
+const ExamsPage = lazy(() => import('@/pages/exams').then((m) => ({ default: m.ExamsPage })))
 
 function RouteFallback() {
   return (
@@ -65,6 +66,7 @@ function App() {
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="timetable" element={<TimetablePage />} />
             <Route path="calendar" element={<CalendarPage />} />
+            <Route path="exams" element={<ExamsPage />} />
             <Route path="planner" element={<PlannerPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="semesters" element={<SemestersPage />} />

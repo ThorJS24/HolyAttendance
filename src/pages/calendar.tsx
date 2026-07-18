@@ -21,6 +21,7 @@ import { useTimetableStore } from '@/store/timetable-store'
 import { useAttendanceStore } from '@/store/attendance-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useLeavePlansStore } from '@/store/leave-plans-store'
+import { useExamsStore } from '@/store/exams-store'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
 import { jsDayToWeekday } from '@/lib/attendance-engine'
@@ -100,6 +101,7 @@ function CalendarGrid() {
     remove: removeRecord,
   } = useAttendanceStore()
   const { holidays, load: loadHolidays, create: createHoliday, remove: removeHoliday } = useHolidaysStore()
+  const { exams, load: loadExams } = useExamsStore()
   const { plans, load: loadPlans } = useLeavePlansStore()
   const { forms: yellowForms, load: loadYellowForms, create: createYellowForm } = useYellowFormsStore()
   const pushToast = useToastStore((s) => s.push)
@@ -120,11 +122,24 @@ function CalendarGrid() {
   }, [loadSubjects, loadRecords, loadHolidays, loadPlans, loadYellowForms])
 
   useEffect(() => {
+    if (currentSemester) loadExams({ semester: currentSemester })
+  }, [loadExams, currentSemester])
+
+  useEffect(() => {
     if (currentSemester) loadSlots(currentSemester)
   }, [loadSlots, currentSemester])
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
   const holidaysByDate = useMemo(() => new Map(holidays.map((h) => [h.date, h])), [holidays])
+  const examsByDate = useMemo(() => {
+    const map = new Map<string, typeof exams>()
+    for (const e of exams) {
+      const list = map.get(e.date) ?? []
+      list.push(e)
+      map.set(e.date, list)
+    }
+    return map
+  }, [exams])
   const recordsByDate = useMemo(() => {
     const map = new Map<string, typeof records>()
     for (const r of records) {
@@ -383,6 +398,7 @@ function CalendarGrid() {
           const dayRecords = recordsByDate.get(cell.iso) ?? []
           const scheduled = cell.inMonth ? slotsForDate(cell.iso) : []
           const onLeave = leaveDates.has(cell.iso)
+          const dayExams = cell.inMonth ? (examsByDate.get(cell.iso) ?? []) : []
           return (
             <button
               key={cell.iso}
@@ -404,6 +420,11 @@ function CalendarGrid() {
                 {onLeave && (
                   <Badge variant="secondary" className="px-1 text-[10px]">
                     leave
+                  </Badge>
+                )}
+                {dayExams.length > 0 && (
+                  <Badge variant="destructive" className="px-1 text-[10px]">
+                    {dayExams.length === 1 ? 'exam' : `${dayExams.length} exams`}
                   </Badge>
                 )}
                 {!holiday && scheduled.length > 0 && (
@@ -449,6 +470,21 @@ function CalendarGrid() {
               <FileWarning /> File yellow form
             </Button>
           </div>
+
+          {selectedDate && (examsByDate.get(selectedDate)?.length ?? 0) > 0 && (
+            <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 p-2">
+              <h3 className="text-sm font-semibold">Exams</h3>
+              {examsByDate.get(selectedDate)?.map((exam) => (
+                <p key={exam.id} className="text-sm">
+                  {exam.name}
+                  {exam.subjectId && subjectsById.get(exam.subjectId) && (
+                    <span className="text-muted-foreground"> · {subjectsById.get(exam.subjectId)?.name}</span>
+                  )}
+                  {exam.notes && <span className="text-muted-foreground"> — {exam.notes}</span>}
+                </p>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">

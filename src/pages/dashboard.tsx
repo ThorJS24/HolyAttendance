@@ -11,12 +11,13 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useSemestersStore } from '@/store/semesters-store'
+import { useExamsStore } from '@/store/exams-store'
 import { useAttendance } from '@/hooks/use-attendance'
 import { computeSafeBunkCount, resolveSubjectMinTarget, jsDayToWeekday } from '@/lib/attendance-engine'
 import { computeProjection, cumulativeAttendanceSeries } from '@/lib/insights'
 import { computeWeekShape } from '@/lib/timetable-week-shape'
 import type { Weekday } from '@/db/schema'
-import { todayIso } from '@/lib/date-utils'
+import { todayIso, countdownLabel } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
 
 const DAY_LABELS: Record<Weekday, string> = {
@@ -44,6 +45,7 @@ export function DashboardPage() {
   const { holidays, load: loadHolidays } = useHolidaysStore()
   const { slots, load: loadSlots } = useTimetableStore()
   const { semesters, load: loadSemesters } = useSemestersStore()
+  const { exams, load: loadExams } = useExamsStore()
 
   const semester = currentSemester || null
   const { bySubject, overall, streaksBySubject, bestStreak, remainingBySubject, remainingOverall, recordsBySubject } =
@@ -56,8 +58,11 @@ export function DashboardPage() {
   }, [loadSubjects, loadHolidays, loadSemesters])
 
   useEffect(() => {
-    if (semester) loadSlots(semester)
-  }, [loadSlots, semester])
+    if (semester) {
+      loadSlots(semester)
+      loadExams({ semester })
+    }
+  }, [loadSlots, loadExams, semester])
 
   const today = todayIso()
   const todayWeekday = jsDayToWeekday(today)
@@ -80,6 +85,15 @@ export function DashboardPage() {
         .sort((a, b) => (a.date < b.date ? -1 : 1))
         .slice(0, 5),
     [holidays, today],
+  )
+
+  const upcomingExams = useMemo(
+    () =>
+      exams
+        .filter((e) => e.date >= today)
+        .sort((a, b) => (a.date < b.date ? -1 : 1))
+        .slice(0, 5),
+    [exams, today],
   )
 
   const subjectRows = useMemo(
@@ -322,6 +336,33 @@ export function DashboardPage() {
                           ? `${(d.totalMinutes / 60).toFixed(d.totalMinutes % 60 === 0 ? 0 : 1)}h`
                           : `${d.teachingCount}p`}
                     </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Upcoming exams</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {upcomingExams.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No upcoming exams. <Link to="/exams" className="underline">Add one</Link>.
+                </p>
+              ) : (
+                upcomingExams.map((exam) => (
+                  <div key={exam.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 truncate">
+                      {exam.name}
+                      {exam.subjectId && subjectsById.get(exam.subjectId) && (
+                        <span className="text-muted-foreground"> · {subjectsById.get(exam.subjectId)?.name}</span>
+                      )}
+                    </span>
+                    <Badge variant={countdownLabel(exam.date) === 'Today' ? 'destructive' : 'warning'} className="shrink-0">
+                      {countdownLabel(exam.date)}
+                    </Badge>
                   </div>
                 ))
               )}

@@ -174,6 +174,22 @@ export const holidays = sqliteTable('holidays', {
     .$defaultFn(() => new Date()),
 })
 
+// Exams/tests. subjectId is optional on purpose — a common test or a paper
+// spanning several subjects isn't tied to one. onDelete 'set null' keeps the
+// exam (with its date/notes) if the subject is later deleted. Scoped by
+// semester label like everything else here.
+export const exams = sqliteTable('exams', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  subjectId: integer('subject_id').references(() => subjects.id, { onDelete: 'set null' }),
+  date: text('date').notNull(),
+  semester: text('semester').notNull(),
+  notes: text('notes'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+})
+
 export const leavePlans = sqliteTable('leave_plans', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   label: text('label'),
@@ -262,6 +278,7 @@ export const schema = {
   timetableSlots,
   attendanceRecords,
   holidays,
+  exams,
   leavePlans,
   yellowForms,
   yellowFormDisputes,

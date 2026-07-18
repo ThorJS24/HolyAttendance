@@ -16,6 +16,7 @@ import type {
   AttendanceRecordFilter,
 } from '../db/repositories/attendance-records'
 import type { Holiday, NewHoliday, HolidayUpdate } from '../db/repositories/holidays'
+import type { Exam, NewExam, ExamUpdate } from '../db/repositories/exams'
 import type { LeavePlan, NewLeavePlan, LeavePlanUpdate } from '../db/repositories/leave-plans'
 import type {
   YellowForm,
@@ -56,6 +57,11 @@ export const IPC_CHANNELS = {
   holidaysCreate: 'holidays:create',
   holidaysUpdate: 'holidays:update',
   holidaysDelete: 'holidays:delete',
+
+  examsList: 'exams:list',
+  examsCreate: 'exams:create',
+  examsUpdate: 'exams:update',
+  examsDelete: 'exams:delete',
 
   leavePlansList: 'leavePlans:list',
   leavePlansCreate: 'leavePlans:create',
@@ -124,6 +130,13 @@ export interface BunkMateApi {
     list: () => Promise<Holiday[]>
     create: (input: NewHoliday) => Promise<Holiday>
     update: (id: number, input: HolidayUpdate) => Promise<Holiday>
+    delete: (id: number) => Promise<void>
+  }
+
+  exams: {
+    list: (opts?: { semester?: string }) => Promise<Exam[]>
+    create: (input: NewExam) => Promise<Exam>
+    update: (id: number, input: ExamUpdate) => Promise<Exam>
     delete: (id: number) => Promise<void>
   }
 
