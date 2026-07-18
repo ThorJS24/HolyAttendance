@@ -14,3 +14,14 @@ export function todayIso(): string {
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
+
+/**
+ * The calendar day after `dateIso` (yyyy-mm-dd), as a plain date string.
+ * UTC-anchored so it never shifts by a timezone offset — matches how dates
+ * are stored everywhere (plain date, no time-of-day).
+ */
+export function nextDayIso(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}

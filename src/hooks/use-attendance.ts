@@ -15,11 +15,24 @@ import {
 } from '@/lib/attendance-engine'
 import { autoPresentRecords, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
 import { scopeRecordsToSubjects } from '@/lib/semester-scope'
-import { todayIso } from '@/lib/date-utils'
+import { computeStreaksBySubject } from '@/lib/insights'
+import { todayIso, nextDayIso } from '@/lib/date-utils'
 
 export interface UseAttendanceResult {
   bySubject: Map<number, SubjectAttendance>
   overall: ReturnType<typeof aggregateOverall>
+  /** Current present-streak per subject (from logged records). */
+  streaksBySubject: Map<number, number>
+  /** Longest current present-streak across all subjects — the headline
+   * number for a "you're on a roll" nudge. */
+  bestStreak: number
+  /** Scheduled (non-holiday) periods still to come between tomorrow and the
+   * semester's end, per subject and in total — feeds end-of-term projection. */
+  remainingBySubject: Map<number, number>
+  remainingOverall: number
+  /** This semester's logged records grouped by subject — feeds sparklines
+   * without every caller re-deriving the semester scoping. */
+  recordsBySubject: Map<number, { subjectId: number; date: string; period: number; status: 'present' | 'absent' }[]>
   loading: boolean
 }
 
@@ -112,5 +125,61 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
 
   const overall = useMemo(() => aggregateOverall(bySubject), [bySubject])
 
-  return { bySubject, overall, loading: recordsLoading }
+  // Streaks run off the logged records only (not auto-present synthetics) —
+  // a "present streak" should reflect classes actually recorded, and scoping
+  // keeps other semesters out.
+  const streaksBySubject = useMemo(
+    () => computeStreaksBySubject(scopedRecords.map((r) => ({ subjectId: r.subjectId, date: r.date, period: r.period, status: r.status }))),
+    [scopedRecords],
+  )
+  const bestStreak = useMemo(
+    () => (streaksBySubject.size === 0 ? 0 : Math.max(...streaksBySubject.values())),
+    [streaksBySubject],
+  )
+
+  // Remaining scheduled periods: tomorrow through the semester end, holiday-
+  // excluded, per subject. Counts only slots that carry a subject (they're
+  // the ones that can accrue attendance).
+  const { remainingBySubject, remainingOverall } = useMemo(() => {
+    const activeSemester = semesters.find((s) => s.label === semester)
+    const today = todayIso()
+    const bySubj = new Map<number, number>()
+    let total = 0
+    if (activeSemester && activeSemester.endDate >= today) {
+      const future = enumerateScheduledPeriods({
+        slots,
+        holidays,
+        startDate: nextDayIso(today),
+        endDate: activeSemester.endDate,
+      })
+      for (const p of future) {
+        if (p.subjectId === null) continue
+        bySubj.set(p.subjectId, (bySubj.get(p.subjectId) ?? 0) + 1)
+        total++
+      }
+    }
+    return { remainingBySubject: bySubj, remainingOverall: total }
+  }, [semesters, semester, slots, holidays])
+
+  const recordsBySubject = useMemo(() => {
+    const map = new Map<number, { subjectId: number; date: string; period: number; status: 'present' | 'absent' }[]>()
+    for (const r of scopedRecords) {
+      const entry = { subjectId: r.subjectId, date: r.date, period: r.period, status: r.status }
+      const list = map.get(r.subjectId)
+      if (list) list.push(entry)
+      else map.set(r.subjectId, [entry])
+    }
+    return map
+  }, [scopedRecords])
+
+  return {
+    bySubject,
+    overall,
+    streaksBySubject,
+    bestStreak,
+    remainingBySubject,
+    remainingOverall,
+    recordsBySubject,
+    loading: recordsLoading,
+  }
 }

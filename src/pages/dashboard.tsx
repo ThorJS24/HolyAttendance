@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CalendarDays, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, CalendarDays, ShieldCheck, Flame } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { Sparkline } from '@/components/ui/sparkline'
 import { SemesterSwitcher } from '@/components/semester-switcher'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -11,6 +12,7 @@ import { useHolidaysStore } from '@/store/holidays-store'
 import { useTimetableStore } from '@/store/timetable-store'
 import { useAttendance } from '@/hooks/use-attendance'
 import { computeSafeBunkCount, resolveSubjectMinTarget, jsDayToWeekday } from '@/lib/attendance-engine'
+import { computeProjection, cumulativeAttendanceSeries } from '@/lib/insights'
 import { todayIso } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
 
@@ -30,7 +32,8 @@ export function DashboardPage() {
   const { slots, load: loadSlots } = useTimetableStore()
 
   const semester = currentSemester || null
-  const { bySubject, overall } = useAttendance(semester)
+  const { bySubject, overall, streaksBySubject, bestStreak, remainingBySubject, remainingOverall, recordsBySubject } =
+    useAttendance(semester)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -72,14 +75,33 @@ export function DashboardPage() {
           const overallStats = stats?.overall ?? { total: 0, attended: 0, percentage: null }
           const resolvedTarget = resolveSubjectMinTarget(subject, subjectMinTarget)
           const safeBunks = computeSafeBunkCount(overallStats.attended, overallStats.total, resolvedTarget)
-          return { subject, stats, overallStats, resolvedTarget, safeBunks }
+          const streak = streaksBySubject.get(subject.id) ?? 0
+          const projection = computeProjection({
+            attended: overallStats.attended,
+            total: overallStats.total,
+            remaining: remainingBySubject.get(subject.id) ?? 0,
+            target: resolvedTarget,
+          })
+          const series = cumulativeAttendanceSeries(recordsBySubject.get(subject.id) ?? [])
+          return { subject, stats, overallStats, resolvedTarget, safeBunks, streak, projection, series }
         })
         .sort((a, b) => (a.overallStats.percentage ?? 100) - (b.overallStats.percentage ?? 100)),
-    [subjects, bySubject, subjectMinTarget],
+    [subjects, bySubject, subjectMinTarget, streaksBySubject, remainingBySubject, recordsBySubject],
   )
 
   const belowTarget = subjectRows.filter(
     (row) => row.overallStats.percentage !== null && row.overallStats.percentage < row.resolvedTarget,
+  )
+
+  const overallProjection = useMemo(
+    () =>
+      computeProjection({
+        attended: overall.attended,
+        total: overall.total,
+        remaining: remainingOverall,
+        target: overallMinTarget,
+      }),
+    [overall, remainingOverall, overallMinTarget],
   )
 
   return (
@@ -102,6 +124,21 @@ export function DashboardPage() {
             <p className="mt-2 text-xs text-muted-foreground">
               {overall.attended} / {overall.total} periods attended · target {overallMinTarget}%
             </p>
+            <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+              {remainingOverall > 0 && overallProjection.ifAllAttended !== null && (
+                <span
+                  title={`If you attend all ${remainingOverall} remaining periods you finish at ${overallProjection.ifAllAttended.toFixed(1)}%; if none, ${overallProjection.ifNoneAttended?.toFixed(1)}%.`}
+                >
+                  Projected {overallProjection.ifNoneAttended?.toFixed(0)}–{overallProjection.ifAllAttended.toFixed(0)}%
+                  by term end
+                </span>
+              )}
+              {bestStreak >= 3 && (
+                <span className="flex items-center gap-0.5 text-warning">
+                  <Flame className="size-3" /> {bestStreak} best streak
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -148,21 +185,48 @@ export function DashboardPage() {
                 No subjects yet. <Link to="/subjects" className="underline">Add one</Link>.
               </p>
             )}
-            {subjectRows.map(({ subject, overallStats, resolvedTarget, safeBunks }) => (
+            {subjectRows.map(({ subject, overallStats, resolvedTarget, safeBunks, streak, projection, series }) => (
               <div key={subject.id} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{subject.name}</span>
-                  <span className={cn('tabular-nums', percentColor(overallStats.percentage, resolvedTarget))}>
-                    {overallStats.percentage === null ? '—' : `${overallStats.percentage.toFixed(1)}%`}
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{subject.name}</span>
+                    {streak >= 3 && (
+                      <span
+                        className="flex shrink-0 items-center gap-0.5 text-xs text-warning"
+                        title={`${streak} in a row attended`}
+                      >
+                        <Flame className="size-3" />
+                        {streak}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Sparkline values={series} className="hidden sm:block" />
+                    <span className={cn('tabular-nums', percentColor(overallStats.percentage, resolvedTarget))}>
+                      {overallStats.percentage === null ? '—' : `${overallStats.percentage.toFixed(1)}%`}
+                    </span>
                   </span>
                 </div>
                 <Progress value={overallStats.percentage ?? 0} />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 text-xs text-muted-foreground">
                   <span>
                     {overallStats.attended} / {overallStats.total} periods
                   </span>
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="size-3" /> {safeBunks} safe bunk{safeBunks === 1 ? '' : 's'}
+                  <span className="flex items-center gap-3">
+                    {projection.remaining > 0 && projection.ifAllAttended !== null && (
+                      <span
+                        title={`If you attend all ${projection.remaining} remaining, you finish at ${projection.ifAllAttended.toFixed(1)}%. If you attend none, ${projection.ifNoneAttended?.toFixed(1)}%.`}
+                      >
+                        {overallStats.percentage !== null && overallStats.percentage < resolvedTarget
+                          ? projection.targetReachable
+                            ? `${projection.classesNeededForTarget} of ${projection.remaining} left to hit ${resolvedTarget}%`
+                            : `Can't reach ${resolvedTarget}% this term`
+                          : `Projected ${projection.ifNoneAttended?.toFixed(0)}–${projection.ifAllAttended.toFixed(0)}%`}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <ShieldCheck className="size-3" /> {safeBunks} safe bunk{safeBunks === 1 ? '' : 's'}
+                    </span>
                   </span>
                 </div>
               </div>
