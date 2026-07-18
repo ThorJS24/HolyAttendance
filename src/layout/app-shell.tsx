@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlobalSearch } from '@/components/global-search'
+import { CommandPalette } from '@/components/command-palette'
 import { NotificationCenter } from '@/components/notification-center'
 import { ErrorBoundary } from '@/components/error-boundary'
 
@@ -97,9 +98,15 @@ export function AppShell() {
           ))}
         </nav>
       </aside>
+      <CommandPalette />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b px-6">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-6">
           <GlobalSearch />
+          <span className="hidden text-xs text-muted-foreground md:inline">
+            Press <kbd className="rounded border bg-muted px-1 py-0.5 font-sans">Ctrl</kbd>+
+            <kbd className="rounded border bg-muted px-1 py-0.5 font-sans">K</kbd> for commands
+          </span>
+          <div className="flex-1" />
           <NotificationCenter />
         </header>
         <main className="flex-1 overflow-auto p-6">
