@@ -6,6 +6,7 @@ interface SettingsState {
   atRiskMarginPp: number
   currentSemester: string
   theme: string
+  density: string
   mutedNotificationCategories: string[]
   backupIntervalDays: number
   backupDir: string | null
@@ -17,6 +18,7 @@ interface SettingsState {
   setAtRiskMarginPp: (value: number) => Promise<void>
   setCurrentSemester: (value: string) => Promise<void>
   setTheme: (value: string) => Promise<void>
+  setDensity: (value: string) => Promise<void>
   setMutedNotificationCategories: (value: string[]) => Promise<void>
   setBackupIntervalDays: (value: number) => Promise<void>
   setBackupDir: (value: string | null) => Promise<void>
@@ -28,6 +30,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   atRiskMarginPp: 5,
   currentSemester: '',
   theme: 'system',
+  density: 'comfortable',
   mutedNotificationCategories: [],
   backupIntervalDays: 7,
   backupDir: null,
@@ -42,6 +45,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       atRiskMarginPp: settings.atRiskMarginPp,
       currentSemester: settings.currentSemester,
       theme: settings.theme,
+      density: settings.density,
       mutedNotificationCategories: settings.mutedNotificationCategories ?? [],
       backupIntervalDays: settings.backupIntervalDays,
       backupDir: settings.backupDir ?? null,
@@ -69,6 +73,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setTheme: async (theme) => {
     await window.bunkmate.settings.update({ theme })
     set({ theme })
+  },
+  setDensity: async (density) => {
+    await window.bunkmate.settings.update({ density })
+    set({ density })
   },
   setMutedNotificationCategories: async (mutedNotificationCategories) => {
     await window.bunkmate.settings.update({ mutedNotificationCategories })

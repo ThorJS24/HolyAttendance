@@ -24,6 +24,7 @@ export function SettingsPage() {
     overallMinTarget,
     subjectMinTarget,
     theme,
+    density,
     atRiskMarginPp,
     mutedNotificationCategories,
     backupIntervalDays,
@@ -33,6 +34,7 @@ export function SettingsPage() {
     setSubjectMinTarget,
     setAtRiskMarginPp,
     setTheme,
+    setDensity,
     setMutedNotificationCategories,
     setBackupIntervalDays,
     setBackupDir,
@@ -164,7 +166,7 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-6">
           <div className="space-y-2">
             <Label htmlFor="theme">Theme</Label>
             <Select value={theme} onValueChange={setTheme}>
@@ -175,6 +177,18 @@ export function SettingsPage() {
                 <SelectItem value="system">System</SelectItem>
                 <SelectItem value="light">Light</SelectItem>
                 <SelectItem value="dark">Dark</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="density">Density</Label>
+            <Select value={density} onValueChange={setDensity}>
+              <SelectTrigger id="density" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="comfortable">Comfortable</SelectItem>
+                <SelectItem value="compact">Compact</SelectItem>
               </SelectContent>
             </Select>
           </div>

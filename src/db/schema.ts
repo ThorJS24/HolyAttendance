@@ -232,6 +232,9 @@ export const settings = sqliteTable('settings', {
   // disables the band entirely.
   atRiskMarginPp: real('at_risk_margin_pp').notNull().default(5),
   theme: text('theme').notNull().default('system'),
+  // 'comfortable' (default) or 'compact' — compact tightens global spacing
+  // and control heights for users tracking many subjects on one screen.
+  density: text('density').notNull().default('comfortable'),
   currentSemester: text('current_semester').notNull().default(''),
   // JSON-encoded array of NotificationCategory values the user has muted;
   // muted categories are dropped before notifications ever reach the bell.

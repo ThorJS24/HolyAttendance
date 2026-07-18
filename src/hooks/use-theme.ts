@@ -3,6 +3,7 @@ import { useSettingsStore } from '@/store/settings-store'
 
 export function useTheme() {
   const theme = useSettingsStore((s) => s.theme)
+  const density = useSettingsStore((s) => s.density)
 
   useEffect(() => {
     const root = document.documentElement
@@ -23,4 +24,8 @@ export function useTheme() {
     media.addEventListener('change', listener)
     return () => media.removeEventListener('change', listener)
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('compact', density === 'compact')
+  }, [density])
 }

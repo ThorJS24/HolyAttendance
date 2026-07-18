@@ -148,3 +148,20 @@
     letter-spacing: -0.01em;
   }
 }
+
+/* Compact density: opt-in tightening for users tracking many subjects on one
+   screen. Scoped to the .compact root class (toggled in use-theme from the
+   density setting) so comfortable mode is completely unaffected. Pulls in the
+   two things that dominate vertical space — card padding and table row
+   height — plus the main content padding, without touching type scale. */
+.compact [data-slot='card-content'],
+.compact [data-slot='card-header'] {
+  padding: 0.85rem;
+}
+.compact table :is(th, td) {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+.compact main {
+  padding: 1rem;
+}
