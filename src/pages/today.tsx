@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { SemesterSwitcher } from '@/components/semester-switcher'
+import { OnboardingChecklist } from '@/components/onboarding-checklist'
 import { useSettingsStore } from '@/store/settings-store'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useTimetableStore } from '@/store/timetable-store'
@@ -95,6 +96,8 @@ export function TodayPage() {
         </div>
         <SemesterSwitcher />
       </div>
+
+      <OnboardingChecklist />
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3 text-sm">
         <span className="font-medium">Overall</span>
