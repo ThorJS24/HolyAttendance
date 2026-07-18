@@ -92,6 +92,7 @@ export const IPC_CHANNELS = {
   periodTypeRulesSetBucket: 'periodTypeRules:setBucket',
 
   filesSaveFile: 'files:saveFile',
+  filesOpenTextFile: 'files:openTextFile',
 
   backupNow: 'backup:now',
   backupRestore: 'backup:restore',
@@ -190,6 +191,10 @@ export interface BunkMateApi {
       content: ArrayBuffer | string
       filters: { name: string; extensions: string[] }[]
     }) => Promise<string | null>
+    /** Opens a native open dialog and returns the file's text, or null if cancelled. */
+    openTextFile: (opts: {
+      filters: { name: string; extensions: string[] }[]
+    }) => Promise<{ name: string; content: string } | null>
   }
 
   backup: {

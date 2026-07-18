@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,11 +18,19 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Card, CardContent } from '@/components/ui/card'
 import { useSubjectsStore } from '@/store/subjects-store'
 import { useAttendanceStore } from '@/store/attendance-store'
+import { useSettingsStore } from '@/store/settings-store'
 import { useToastStore } from '@/store/toast-store'
 import type { AttendanceRecord } from '../../electron/db/repositories/attendance-records'
 import type { AttendanceStatus } from '@/db/schema'
 import { todayIso } from '@/lib/date-utils'
 import { useHotkey } from '@/hooks/use-hotkey'
+import {
+  parseAttendanceCsv,
+  reconcileImport,
+  reconcileKey,
+  type ReconcileResult,
+  type ParseError,
+} from '@/lib/attendance-import'
 
 function startOfMonth(): string {
   const d = new Date()
@@ -43,6 +51,7 @@ function emptyForm(defaultSubjectId: string): RecordFormState {
 export function AttendancePage() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const { records, loading, load, create, update, remove } = useAttendanceStore()
+  const currentSemester = useSettingsStore((s) => s.currentSemester)
   const pushToast = useToastStore((s) => s.push)
 
   const [subjectFilter, setSubjectFilter] = useState<string>('all')
@@ -54,6 +63,13 @@ export function AttendancePage() {
   const [form, setForm] = useState<RecordFormState>(emptyForm(''))
   const [deleteTarget, setDeleteTarget] = useState<AttendanceRecord | null>(null)
   const [saving, setSaving] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importFileName, setImportFileName] = useState('')
+  const [importResult, setImportResult] = useState<ReconcileResult | null>(null)
+  const [importErrors, setImportErrors] = useState<ParseError[]>([])
+  // key -> existing record, so an 'update' entry can find the row id to patch.
+  const [importExistingByKey, setImportExistingByKey] = useState<Map<string, AttendanceRecord>>(new Map())
+  const [importApplying, setImportApplying] = useState(false)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -150,13 +166,82 @@ export function AttendancePage() {
     })
   }
 
+  async function handleImport() {
+    const file = await window.bunkmate.files.openTextFile({ filters: [{ name: 'CSV', extensions: ['csv', 'txt'] }] })
+    if (!file) return
+    const { rows, errors } = parseAttendanceCsv(file.content)
+
+    // Match against the active semester's subjects; reconcile against ALL
+    // stored records (not the filtered view) so nothing is misjudged as new.
+    const semesterSubjects = subjects.filter((s) => s.semester === currentSemester)
+    const subjectIdByName = new Map(semesterSubjects.map((s) => [s.name.toLowerCase(), s.id]))
+    const allRecords = await window.bunkmate.attendanceRecords.list()
+    const existingByKey = new Map<string, AttendanceRecord>()
+    const existingStatusByKey = new Map<string, 'present' | 'absent'>()
+    for (const r of allRecords) {
+      const key = reconcileKey(r.subjectId, r.date, r.period)
+      existingByKey.set(key, r)
+      existingStatusByKey.set(key, r.status)
+    }
+
+    const result = reconcileImport({ rows, subjectIdByName, existingStatusByKey })
+    setImportFileName(file.name)
+    setImportErrors(errors)
+    setImportExistingByKey(existingByKey)
+    setImportResult(result)
+    setImportOpen(true)
+  }
+
+  async function applyImport() {
+    if (!importResult) return
+    setImportApplying(true)
+    try {
+      let created = 0
+      let updated = 0
+      for (const entry of importResult.entries) {
+        if (entry.subjectId === null) continue
+        if (entry.action === 'create') {
+          await create({
+            subjectId: entry.subjectId,
+            date: entry.row.date,
+            period: entry.row.period,
+            status: entry.row.status,
+            source: 'manual',
+            slotId: null,
+          })
+          created++
+        } else if (entry.action === 'update') {
+          const existing = importExistingByKey.get(reconcileKey(entry.subjectId, entry.row.date, entry.row.period))
+          if (existing) {
+            await update(existing.id, { status: entry.row.status })
+            updated++
+          }
+        }
+      }
+      await load({
+        subjectId: subjectFilter === 'all' ? undefined : Number(subjectFilter),
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+      })
+      pushToast({ title: 'Import applied', description: `${created} added, ${updated} updated.` })
+      setImportOpen(false)
+    } finally {
+      setImportApplying(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Attendance</h1>
-        <Button onClick={openCreateDialog} disabled={subjects.length === 0}>
-          <Plus /> Mark Attendance
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleImport} disabled={subjects.length === 0} title="Import attendance from a CSV (date, subject, period, status)">
+            <Upload /> Import CSV
+          </Button>
+          <Button onClick={openCreateDialog} disabled={subjects.length === 0}>
+            <Plus /> Mark Attendance
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-4">
@@ -348,6 +433,75 @@ export function AttendancePage() {
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import preview — {importFileName}</DialogTitle>
+            <DialogDescription>
+              Matched against {currentSemester || 'the active semester'}'s subjects. Nothing is applied until you
+              confirm, and existing records the file doesn't mention are never touched.
+            </DialogDescription>
+          </DialogHeader>
+
+          {importResult && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2 text-sm">
+                <Badge variant="success">{importResult.counts.create} new</Badge>
+                <Badge variant="warning">{importResult.counts.update} changed</Badge>
+                <Badge variant="outline">{importResult.counts.unchanged} unchanged</Badge>
+                {importResult.counts.unmatched > 0 && (
+                  <Badge variant="destructive">{importResult.counts.unmatched} unmatched</Badge>
+                )}
+                {importErrors.length > 0 && (
+                  <Badge variant="destructive">{importErrors.length} invalid row(s)</Badge>
+                )}
+              </div>
+
+              <div className="max-h-64 space-y-1 overflow-y-auto text-xs">
+                {importResult.entries
+                  .filter((e) => e.action === 'create' || e.action === 'update' || e.action === 'unmatched')
+                  .slice(0, 200)
+                  .map((e, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+                      <span className="truncate">
+                        {e.row.date} · {e.row.subjectName} · P{e.row.period}
+                      </span>
+                      {e.action === 'create' && <span className="text-success">+ {e.row.status}</span>}
+                      {e.action === 'update' && (
+                        <span className="text-warning">
+                          {e.existingStatus} → {e.row.status}
+                        </span>
+                      )}
+                      {e.action === 'unmatched' && <span className="text-destructive">no subject match</span>}
+                    </div>
+                  ))}
+                {importErrors.slice(0, 50).map((err) => (
+                  <div key={`err-${err.rowNumber}`} className="rounded border border-destructive/40 px-2 py-1 text-destructive">
+                    Row {err.rowNumber}: {err.message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={applyImport}
+              disabled={
+                importApplying ||
+                !importResult ||
+                importResult.counts.create + importResult.counts.update === 0
+              }
+            >
+              Apply {importResult ? importResult.counts.create + importResult.counts.update : 0} change(s)
             </Button>
           </DialogFooter>
         </DialogContent>

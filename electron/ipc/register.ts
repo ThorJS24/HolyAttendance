@@ -133,6 +133,16 @@ export function registerIpcHandlers(db: AppDatabase): void {
     },
   )
 
+  ipcMain.handle(
+    IPC_CHANNELS.filesOpenTextFile,
+    async (_e, opts: { filters: { name: string; extensions: string[] }[] }) => {
+      const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: opts.filters })
+      if (result.canceled || result.filePaths.length === 0) return null
+      const filePath = result.filePaths[0]
+      return { name: filePath.split(/[\\/]/).pop() ?? filePath, content: fs.readFileSync(filePath, 'utf8') }
+    },
+  )
+
   ipcMain.handle(IPC_CHANNELS.backupNow, async () => {
     const result = await dialog.showSaveDialog({
       defaultPath: defaultBackupFileName(),
