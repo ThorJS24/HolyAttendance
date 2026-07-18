@@ -140,6 +140,7 @@ function CalendarGrid() {
     }
     return map
   }, [exams])
+  const yellowFormDates = useMemo(() => new Set(yellowForms.map((f) => f.date)), [yellowForms])
   const recordsByDate = useMemo(() => {
     const map = new Map<string, typeof records>()
     for (const r of records) {
@@ -404,6 +405,8 @@ function CalendarGrid() {
           const scheduled = cell.inMonth ? slotsForDate(cell.iso) : []
           const onLeave = leaveDates.has(cell.iso)
           const dayExams = cell.inMonth ? (examsByDate.get(cell.iso) ?? []) : []
+          const hasYellowForm = cell.inMonth && yellowFormDates.has(cell.iso)
+          const absentCount = dayRecords.filter((r) => r.status === 'absent').length
           return (
             <button
               key={cell.iso}
@@ -417,8 +420,13 @@ function CalendarGrid() {
             >
               <span className="text-xs font-medium">{cell.day}</span>
               <div className="flex flex-wrap gap-1">
+                {/* Color legend: green = holiday, blue = working day, yellow =
+                    a yellow form was filed, red = an absence on that day. */}
                 {holiday && (
-                  <Badge variant={holiday.type === 'working_saturday' ? 'outline' : 'warning'} className="px-1 text-[10px]">
+                  <Badge
+                    variant={holiday.type === 'working_saturday' ? 'default' : 'success'}
+                    className="px-1 text-[10px]"
+                  >
                     {holiday.type === 'working_saturday' ? 'working' : 'holiday'}
                   </Badge>
                 )}
@@ -427,21 +435,31 @@ function CalendarGrid() {
                     leave
                   </Badge>
                 )}
+                {hasYellowForm && (
+                  <Badge variant="warning" className="px-1 text-[10px]">
+                    form
+                  </Badge>
+                )}
                 {dayExams.length > 0 && (
-                  <Badge variant="destructive" className="px-1 text-[10px]">
+                  <Badge variant="outline" className="border-destructive px-1 text-[10px] text-destructive">
                     {dayExams.length === 1 ? 'exam' : `${dayExams.length} exams`}
                   </Badge>
                 )}
                 {!holiday && scheduled.length > 0 && (
-                  <Badge variant="outline" className="px-1 text-[10px]">
+                  <Badge variant="default" className="px-1 text-[10px]">
                     {scheduled.length} class{scheduled.length === 1 ? '' : 'es'}
                   </Badge>
                 )}
-                {dayRecords.length > 0 && (
-                  <Badge variant="default" className="px-1 text-[10px]">
-                    {dayRecords.filter((r) => r.status === 'present').length}/{dayRecords.length}
-                  </Badge>
-                )}
+                {dayRecords.length > 0 &&
+                  (absentCount > 0 ? (
+                    <Badge variant="destructive" className="px-1 text-[10px]">
+                      {absentCount} absent
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="px-1 text-[10px]">
+                      {dayRecords.filter((r) => r.status === 'present').length}/{dayRecords.length}
+                    </Badge>
+                  ))}
               </div>
             </button>
           )
