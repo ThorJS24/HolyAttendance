@@ -25,7 +25,7 @@ import { useExamsStore } from '@/store/exams-store'
 import { useDayMarking } from '@/hooks/use-day-marking'
 import { useYellowFormsStore } from '@/store/yellow-forms-store'
 import { useToastStore } from '@/store/toast-store'
-import { jsDayToWeekday } from '@/lib/attendance-engine'
+import { jsDayToWeekday, enumerateScheduledPeriods } from '@/lib/attendance-engine'
 import { resolveDayPeriods, buildPeriodEndMinutesForDay, minutesSinceMidnight } from '@/lib/day-attendance'
 import { todayIso } from '@/lib/date-utils'
 import { HolidaysTab } from '@/pages/holidays-tab'
@@ -107,6 +107,11 @@ function CalendarGrid() {
   const [yellowFormReason, setYellowFormReason] = useState('')
   const [filingYellowForm, setFilingYellowForm] = useState(false)
   const [markingAll, setMarkingAll] = useState<'present' | 'absent' | null>(null)
+  const [rangeOpen, setRangeOpen] = useState(false)
+  const [rangeFrom, setRangeFrom] = useState('')
+  const [rangeTo, setRangeTo] = useState('')
+  const [rangeStatus, setRangeStatus] = useState<'present' | 'absent'>('present')
+  const [rangeMarking, setRangeMarking] = useState(false)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -243,6 +248,36 @@ function CalendarGrid() {
     }
   }
 
+  async function markRange() {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) {
+      pushToast({ title: 'Invalid range', description: 'Pick a start date on or before the end date.' })
+      return
+    }
+    setRangeMarking(true)
+    try {
+      // enumerateScheduledPeriods expands the recurring timetable into concrete
+      // dated periods and already skips holiday-excluded dates. Only mark
+      // subject-bearing, attendance-counting periods.
+      const periods = enumerateScheduledPeriods({
+        slots: slots.map((s) => ({ id: s.id, subjectId: s.subjectId, type: s.type, day: s.day, period: s.period })),
+        holidays,
+        startDate: rangeFrom,
+        endDate: rangeTo,
+      }).filter((p) => p.subjectId !== null && !NON_ATTENDANCE_TYPES.includes(p.type))
+
+      for (const p of periods) {
+        await markWrite(p.date, p.subjectId as number, p.slotId, rangeStatus)
+      }
+      pushToast({
+        title: `Marked ${periods.length} period${periods.length === 1 ? '' : 's'} ${rangeStatus}`,
+        description: `${rangeFrom} → ${rangeTo} (holidays skipped)`,
+      })
+      setRangeOpen(false)
+    } finally {
+      setRangeMarking(false)
+    }
+  }
+
   const eligibleYellowFormSlots = (selected?.slots ?? []).filter((s) => s.type !== 'lunch' && s.subjectId !== null)
 
   function yellowFormFor(subjectId: number, period: number) {
@@ -343,6 +378,18 @@ function CalendarGrid() {
             <ChevronRight />
           </Button>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setRangeFrom(todayIso())
+            setRangeTo(todayIso())
+            setRangeStatus('present')
+            setRangeOpen(true)
+          }}
+        >
+          Mark range
+        </Button>
       </div>
 
       <div className="grid grid-cols-7 gap-1 rounded-lg border p-2">
@@ -619,6 +666,48 @@ function CalendarGrid() {
             </Button>
             <Button type="button" onClick={handleFileYellowForm} disabled={filingYellowForm}>
               File
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rangeOpen} onOpenChange={setRangeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark a date range</DialogTitle>
+            <DialogDescription>
+              Marks every scheduled class (holidays skipped, lunch/meeting excluded) between two dates. Existing
+              records in the range are updated to match.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="range-from">From</Label>
+              <Input id="range-from" type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="range-to">To</Label>
+              <Input id="range-to" type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="range-status">Mark as</Label>
+            <Select value={rangeStatus} onValueChange={(v) => setRangeStatus(v as 'present' | 'absent')}>
+              <SelectTrigger id="range-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="present">Present</SelectItem>
+                <SelectItem value="absent">Absent</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRangeOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={markRange} disabled={rangeMarking}>
+              Mark range
             </Button>
           </DialogFooter>
         </DialogContent>
