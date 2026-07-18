@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "Offline attendance tracker for CHRIST University students",
+  "author": "BunkMate Pro",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "predev": "electron-rebuild -f -w better-sqlite3",
@@ -82,7 +84,8 @@
       "**/*.node"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     },
     "directories": {
       "output": "release"
