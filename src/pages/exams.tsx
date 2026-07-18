@@ -24,13 +24,26 @@ import { useSettingsStore } from '@/store/settings-store'
 import { useToastStore } from '@/store/toast-store'
 import { countdownLabel, daysUntil, todayIso } from '@/lib/date-utils'
 import { parseHallTicket } from '@/lib/hall-ticket-parser'
+import { groupExams } from '@/lib/exam-grouping'
 import type { Exam } from '../../electron/db/repositories/exams'
 import type { PdfOcrProgress } from '../../electron/ipc/contract'
 
 const NO_SUBJECT = 'none'
-// Shown as the heading for exams with no examGroup set; always sorted last.
-const UNGROUPED = 'Ungrouped'
-const GROUP_SUGGESTIONS = ['Mid Semester', 'End Semester', 'CIA I', 'CIA II', 'Practical']
+// The CHRIST sitting structure: three CIAs of two components each, the two
+// semester exams, and their optional lab papers. Free text still wins — these
+// are only suggestions in the dropdown, so anything else can be typed.
+const GROUP_SUGGESTIONS = [
+  'CIA I - Component 1',
+  'CIA I - Component 2',
+  'CIA II - Component 1',
+  'CIA II - Component 2',
+  'CIA III - Component 1',
+  'CIA III - Component 2',
+  'Mid Semester',
+  'Mid Semester - Lab',
+  'End Semester',
+  'End Semester - Lab',
+]
 
 interface ExamFormState {
   name: string
@@ -126,38 +139,8 @@ export function ExamsPage() {
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
   const semesterSubjects = useMemo(() => subjects.filter((s) => s.semester === semester), [subjects, semester])
 
-  // semester (newest first) -> exam group (Ungrouped last) -> exams (by date).
-  const grouped = useMemo(() => {
-    const bySemester = new Map<string, Map<string, Exam[]>>()
-    for (const exam of exams) {
-      const sem = exam.semester?.trim() || 'Unassigned'
-      const group = exam.examGroup?.trim() || UNGROUPED
-      let groups = bySemester.get(sem)
-      if (!groups) {
-        groups = new Map()
-        bySemester.set(sem, groups)
-      }
-      const list = groups.get(group)
-      if (list) list.push(exam)
-      else groups.set(group, [exam])
-    }
-    return [...bySemester.entries()]
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .map(([sem, groups]) => ({
-        semester: sem,
-        total: [...groups.values()].reduce((n, list) => n + list.length, 0),
-        groups: [...groups.entries()]
-          .sort((a, b) => {
-            if (a[0] === UNGROUPED) return 1
-            if (b[0] === UNGROUPED) return -1
-            return a[0].localeCompare(b[0])
-          })
-          .map(([name, list]) => ({
-            name,
-            exams: [...list].sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0)),
-          })),
-      }))
-  }, [exams])
+  // semester (newest first) -> sitting (in the order they happen) -> exams.
+  const grouped = useMemo(() => groupExams(exams), [exams])
 
   const groupSuggestions = useMemo(() => {
     const set = new Set<string>(GROUP_SUGGESTIONS)
