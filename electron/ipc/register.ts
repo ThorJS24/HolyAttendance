@@ -1,6 +1,6 @@
 import { ipcMain, dialog, app } from 'electron'
 import fs from 'node:fs'
-import { extractPdfText } from '../pdf-text'
+import { extractHallTicketText } from '../hall-ticket-ocr'
 import { getEsproStatus, saveEsproCredential, removeEsproCredential } from '../espro/credential-store'
 import type { AppDatabase } from '../db/client'
 import { IPC_CHANNELS } from './contract'
@@ -152,7 +152,9 @@ export function registerIpcHandlers(db: AppDatabase): void {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     const filePath = result.filePaths[0]
-    const text = await extractPdfText(new Uint8Array(fs.readFileSync(filePath)))
+    // Hall tickets are print-to-PDF with a non-extractable Type3 text layer, so
+    // we OCR the rendered page rather than read the (scrambled) text stream.
+    const text = await extractHallTicketText(new Uint8Array(fs.readFileSync(filePath)))
     return { name: filePath.split(/[\\/]/).pop() ?? filePath, text }
   })
 

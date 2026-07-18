@@ -90,10 +90,10 @@ export default defineConfig(({ command }) => {
                 fileName: () => 'main.cjs',
               },
               rollupOptions: {
-                external: ['better-sqlite3', 'electron', /^pdfjs-dist/],
+                external: ['better-sqlite3', 'electron', /^pdfjs-dist/, /^tesseract\.js/, /^@napi-rs\//],
               },
               rolldownOptions: {
-                external: ['better-sqlite3', 'electron', /^pdfjs-dist/],
+                external: ['better-sqlite3', 'electron', /^pdfjs-dist/, /^tesseract\.js/, /^@napi-rs\//],
               },
             },
           },

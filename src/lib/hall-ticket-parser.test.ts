@@ -77,4 +77,23 @@ Date of issue: 01-12-2026`
     const dup = `CSE731 Data Engineering 15-12-2026\nCSE731 Data Engineering 15-12-2026`
     expect(parseHallTicket(dup, subjects)).toHaveLength(1)
   })
+
+  // Mirrors the real OCR output of a CHRIST hall ticket: "<code> <name> <date>
+  // <reporting> <exam-time> <venue>" per row, framed by the portal URL header
+  // and the "generated ... IST" footer (both carry dates but aren't exams).
+  it('parses real OCR-style hall-ticket rows and drops trailing times/venue', () => {
+    const ocr = `10/04/2024, 15:59 kp.christuniversity.in/KnowledgePro/StudentLoginNewAction.do?method=printHallTicket
+MA231 MATHEMATICS - II 15/04/2024 09:15 AM 09:30 BLOCK II" Floor:FIRST -
+PH232P PHYSICS FOR ENGINEERS 17/04/2024 09:15 AM AM Room:K224
+BS236 BIOLOGY FOR ENGINEERS 24/04/2024 09:15 AM AM Room:K224
+Wed 10/04/2024 at 03:59:22 PM IST`
+    const rows = parseHallTicket(ocr, [])
+    expect(rows.map((r) => r.date)).toEqual(['2024-04-15', '2024-04-17', '2024-04-24'])
+    expect(rows[0].name).toBe('MATHEMATICS - II')
+    expect(rows[1].name).toBe('PHYSICS FOR ENGINEERS')
+    // venue/times must not leak into the name
+    expect(rows[0].name).not.toMatch(/BLOCK|Floor|Room|09:/)
+    // portal URL header and IST footer are not exams
+    expect(rows.some((r) => r.date === '2024-04-10')).toBe(false)
+  })
 })

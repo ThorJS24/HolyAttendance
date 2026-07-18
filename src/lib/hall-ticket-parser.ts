@@ -28,6 +28,10 @@ const MONTHS: Record<string, number> = {
 // Lines whose date is obviously not an exam date — issue/print/birth dates.
 const NON_EXAM_DATE_LINE = /\b(date of (issue|print|printing)|printed on|generated on|issued on|d\.?o\.?b|date of birth|valid (up)?to)\b/i
 
+// Lines that carry a date but frame the printout rather than an exam: the
+// portal URL header and the "generated ... IST" footer top-and-tail the page.
+const NON_EXAM_LINE = /https?:|christuniversity|knowledgepro|method=|\.do\b|\bIST\b/i
+
 // A course-code token like CSE731, MCA502A, 21MDS131.
 const COURSE_CODE = /\b(\d{0,2}[A-Z]{2,4}\d{2,4}[A-Z]?)\b/
 
@@ -86,13 +90,16 @@ export function findDate(line: string): FoundDate | null {
 }
 
 function extractName(line: string, dateMatch: string, code: string | null): string {
-  let name = line
+  // On a hall-ticket row the layout is "<code> <course name> <date> <times>
+  // <venue>", so the course name is the text between the code and the date.
+  // Taking everything before the date drops the trailing times/venue cleanly.
+  const dateStart = line.indexOf(dateMatch)
+  let name = dateStart > 0 ? line.slice(0, dateStart) : line.replace(dateMatch, ' ')
   if (code) name = name.replace(code, ' ')
-  name = name.replace(dateMatch, ' ')
-  // Strip time tokens like "10:00 AM", "2:00PM", "14:30".
+  // Strip any stray time tokens like "10:00 AM", "2:00PM", "14:30".
   name = name.replace(/\b\d{1,2}:\d{2}\s*(?:[AaPp]\.?[Mm]\.?)?/g, ' ')
   // Strip common table noise and separators.
-  name = name.replace(/\b(session|forenoon|afternoon|fn|an|slot|shift)\b/gi, ' ')
+  name = name.replace(/\b(session|forenoon|afternoon|reporting|exam\s*time|slot|shift)\b/gi, ' ')
   name = name.replace(/[|·•\t]+/g, ' ').replace(/\s{2,}/g, ' ').replace(/^[\s\-–—:.]+|[\s\-–—:.]+$/g, '')
   return name.trim()
 }
@@ -150,7 +157,7 @@ export function parseHallTicket(text: string, subjects: SubjectLike[]): HallTick
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim()
     if (line.length === 0) continue
-    if (NON_EXAM_DATE_LINE.test(line)) continue
+    if (NON_EXAM_DATE_LINE.test(line) || NON_EXAM_LINE.test(line)) continue
 
     const found = findDate(line)
     if (!found) continue
