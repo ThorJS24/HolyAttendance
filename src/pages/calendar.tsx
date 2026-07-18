@@ -92,7 +92,13 @@ function CalendarGrid() {
   const { subjects, load: loadSubjects } = useSubjectsStore()
   const currentSemester = useSettingsStore((s) => s.currentSemester)
   const { slots, load: loadSlots } = useTimetableStore()
-  const { records, load: loadRecords, create: createRecord, update: updateRecord } = useAttendanceStore()
+  const {
+    records,
+    load: loadRecords,
+    create: createRecord,
+    update: updateRecord,
+    remove: removeRecord,
+  } = useAttendanceStore()
   const { holidays, load: loadHolidays, create: createHoliday, remove: removeHoliday } = useHolidaysStore()
   const { plans, load: loadPlans } = useLeavePlansStore()
   const { forms: yellowForms, load: loadYellowForms, create: createYellowForm } = useYellowFormsStore()
@@ -184,29 +190,49 @@ function CalendarGrid() {
 
   /** Writes one period's status, reusing the existing record if there is one.
    * Shared by the per-period buttons and the whole-day batch actions so both
-   * paths create/update records identically. */
-  async function writeAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
-    if (!selectedDate) return
+   * paths create/update records identically. Returns an undo closure that
+   * restores the exact prior state — either the record's old status, or
+   * deleting it if the write was what created it. */
+  async function writeAttendance(
+    subjectId: number,
+    slotId: number,
+    status: 'present' | 'absent',
+  ): Promise<() => Promise<void>> {
+    if (!selectedDate) return async () => {}
     const slot = slots.find((s) => s.id === slotId)
-    if (!slot) return
+    if (!slot) return async () => {}
     const existing = selected?.records.find((r) => r.subjectId === subjectId && r.period === slot.period)
     if (existing) {
+      const priorStatus = existing.status
       await updateRecord(existing.id, { status })
-    } else {
-      await createRecord({
-        subjectId,
-        date: selectedDate,
-        period: slot.period,
-        status,
-        source: 'manual',
-        slotId,
-      })
+      return async () => {
+        await updateRecord(existing.id, { status: priorStatus })
+      }
+    }
+    const created = await createRecord({
+      subjectId,
+      date: selectedDate,
+      period: slot.period,
+      status,
+      source: 'manual',
+      slotId,
+    })
+    return async () => {
+      await removeRecord(created.id)
     }
   }
 
   async function toggleAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
-    await writeAttendance(subjectId, slotId, status)
-    pushToast({ title: `Marked ${status}` })
+    const undo = await writeAttendance(subjectId, slotId, status)
+    pushToast({
+      title: `Marked ${status}`,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          void undo()
+        },
+      },
+    })
   }
 
   // Periods "Mark all" writes: everything except meeting and lunch, matching
@@ -222,12 +248,22 @@ function CalendarGrid() {
     if (markableSlots.length === 0) return
     setMarkingAll(status)
     try {
+      const undos: (() => Promise<void>)[] = []
       for (const slot of markableSlots) {
-        await writeAttendance(slot.subjectId as number, slot.id, status)
+        undos.push(await writeAttendance(slot.subjectId as number, slot.id, status))
       }
       pushToast({
         title: `Marked ${markableSlots.length} period${markableSlots.length === 1 ? '' : 's'} ${status}`,
         description: selectedDate ?? undefined,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            // Undo in reverse so a create-then-nothing sequence unwinds cleanly.
+            void (async () => {
+              for (const undo of undos.reverse()) await undo()
+            })()
+          },
+        },
       })
     } finally {
       setMarkingAll(null)
