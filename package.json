@@ -1,7 +1,7 @@
 {
   "name": "bunkmate-pro",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "description": "Offline attendance tracker for CHRIST University students",
   "author": "BunkMate Pro",

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, FileUp, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, FileUp, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -76,6 +76,14 @@ function formatTimeCell(exam: Exam): string {
   return exam.startTime ?? `report ${exam.reportingTime}`
 }
 
+/** Summary shown on a collapsed group so it's still useful shut. */
+function dateRangeLabel(list: Exam[]): string {
+  if (list.length === 0) return ''
+  const first = list[0].date
+  const last = list[list.length - 1].date
+  return first === last ? first : `${first} → ${last}`
+}
+
 export function ExamsPage() {
   const semester = useSettingsStore((s) => s.currentSemester)
   const { exams, loading, load, create, update, remove } = useExamsStore()
@@ -94,6 +102,17 @@ export function ExamsPage() {
   const [draftGroup, setDraftGroup] = useState('')
   // Non-null while a hall ticket is being OCR'd — drives the progress dialog.
   const [progress, setProgress] = useState<PdfOcrProgress | null>(null)
+
+  // Only the user's explicit open/close choices are stored; the default is
+  // derived (active semester open, older ones folded; groups open). Deriving
+  // rather than seeding state avoids depending on when exams finish loading —
+  // other pages populate the same store, so a one-shot init saw a partial list.
+  // Group keys are "<semester>::<group>" since each semester has its own
+  // Mid/End Semester.
+  const [semesterOpen, setSemesterOpen] = useState<Record<string, boolean>>({})
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({})
+  const isSemesterOpen = (sem: string) => semesterOpen[sem] ?? sem === semester
+  const isGroupOpen = (key: string) => groupOpen[key] ?? true
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -329,25 +348,64 @@ export function ExamsPage() {
       )}
 
       {!loading &&
-        grouped.map((sem) => (
+        grouped.map((sem) => {
+          const semOpen = isSemesterOpen(sem.semester)
+          return (
           <div key={sem.semester} className="space-y-3">
-            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md py-1 text-left hover:bg-muted/50"
+              aria-expanded={semOpen}
+              onClick={() => setSemesterOpen((prev) => ({ ...prev, [sem.semester]: !semOpen }))}
+            >
+              {semOpen ? (
+                <ChevronDown className="size-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="size-4 text-muted-foreground" />
+              )}
               <h2 className="text-lg font-semibold">{sem.semester}</h2>
               <Badge variant="secondary">
                 {sem.total} exam{sem.total === 1 ? '' : 's'}
               </Badge>
-            </div>
+              {!semOpen && (
+                <span className="text-sm text-muted-foreground">
+                  {sem.groups.map((g) => `${g.name} (${g.exams.length})`).join(' · ')}
+                </span>
+              )}
+            </button>
 
-            {sem.groups.map((group) => (
+            {semOpen &&
+              sem.groups.map((group) => {
+                const groupKey = `${sem.semester}::${group.name}`
+                const grpOpen = isGroupOpen(groupKey)
+                return (
               <Card key={group.name}>
                 <CardHeader className="py-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    {group.name}
-                    <Badge variant="outline" className="font-normal">
-                      {group.exams.length}
-                    </Badge>
-                  </CardTitle>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 text-left"
+                    aria-expanded={grpOpen}
+                    onClick={() => setGroupOpen((prev) => ({ ...prev, [groupKey]: !grpOpen }))}
+                  >
+                    {grpOpen ? (
+                      <ChevronDown className="size-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="size-4 text-muted-foreground" />
+                    )}
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      {group.name}
+                      <Badge variant="outline" className="font-normal">
+                        {group.exams.length}
+                      </Badge>
+                    </CardTitle>
+                    {!grpOpen && (
+                      <span className="text-sm tabular-nums text-muted-foreground">
+                        {dateRangeLabel(group.exams)}
+                      </span>
+                    )}
+                  </button>
                 </CardHeader>
+                {grpOpen && (
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -405,10 +463,13 @@ export function ExamsPage() {
                     </TableBody>
                   </Table>
                 </CardContent>
+                )}
               </Card>
-            ))}
+                )
+              })}
           </div>
-        ))}
+          )
+        })}
 
       {/* OCR progress — modal so the app clearly isn't stuck. */}
       <Dialog open={progress !== null}>
