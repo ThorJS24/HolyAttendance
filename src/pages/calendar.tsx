@@ -93,6 +93,7 @@ function CalendarGrid() {
   const [yellowFormPeriod, setYellowFormPeriod] = useState('')
   const [yellowFormReason, setYellowFormReason] = useState('')
   const [filingYellowForm, setFilingYellowForm] = useState(false)
+  const [markingAll, setMarkingAll] = useState<'present' | 'absent' | null>(null)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -171,7 +172,10 @@ function CalendarGrid() {
     return new Map(resolved.map((p) => [p.slotId, p.effectiveStatus]))
   }, [selectedDate, slots, recordsByDate])
 
-  async function toggleAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
+  /** Writes one period's status, reusing the existing record if there is one.
+   * Shared by the per-period buttons and the whole-day batch actions so both
+   * paths create/update records identically. */
+  async function writeAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
     if (!selectedDate) return
     const slot = slots.find((s) => s.id === slotId)
     if (!slot) return
@@ -188,7 +192,32 @@ function CalendarGrid() {
         slotId,
       })
     }
+  }
+
+  async function toggleAttendance(subjectId: number, slotId: number, status: 'present' | 'absent') {
+    await writeAttendance(subjectId, slotId, status)
     pushToast({ title: `Marked ${status}` })
+  }
+
+  // Periods that can actually carry attendance: a real subject is required,
+  // which already excludes lunch and the typeless types (meeting/mentoring/
+  // minor) since those never have a subject attached.
+  const markableSlots = (selected?.slots ?? []).filter((s) => s.type !== 'lunch' && s.subjectId !== null)
+
+  async function markWholeDay(status: 'present' | 'absent') {
+    if (markableSlots.length === 0) return
+    setMarkingAll(status)
+    try {
+      for (const slot of markableSlots) {
+        await writeAttendance(slot.subjectId as number, slot.id, status)
+      }
+      pushToast({
+        title: `Marked ${markableSlots.length} period${markableSlots.length === 1 ? '' : 's'} ${status}`,
+        description: selectedDate ?? undefined,
+      })
+    } finally {
+      setMarkingAll(null)
+    }
   }
 
   const eligibleYellowFormSlots = (selected?.slots ?? []).filter((s) => s.type !== 'lunch' && s.subjectId !== null)
@@ -362,7 +391,32 @@ function CalendarGrid() {
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Scheduled periods</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Scheduled periods</h3>
+              {markableSlots.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="mr-1 text-xs text-muted-foreground">Mark all:</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={markingAll !== null}
+                    onClick={() => markWholeDay('present')}
+                  >
+                    Present
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={markingAll !== null}
+                    onClick={() => markWholeDay('absent')}
+                  >
+                    Absent
+                  </Button>
+                </div>
+              )}
+            </div>
             {selected?.slots.length === 0 && (
               <p className="text-sm text-muted-foreground">No periods scheduled.</p>
             )}
