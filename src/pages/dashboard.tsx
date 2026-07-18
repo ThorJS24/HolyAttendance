@@ -10,11 +10,23 @@ import { useSubjectsStore } from '@/store/subjects-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useHolidaysStore } from '@/store/holidays-store'
 import { useTimetableStore } from '@/store/timetable-store'
+import { useSemestersStore } from '@/store/semesters-store'
 import { useAttendance } from '@/hooks/use-attendance'
 import { computeSafeBunkCount, resolveSubjectMinTarget, jsDayToWeekday } from '@/lib/attendance-engine'
 import { computeProjection, cumulativeAttendanceSeries } from '@/lib/insights'
+import { computeWeekShape } from '@/lib/timetable-week-shape'
+import type { Weekday } from '@/db/schema'
 import { todayIso } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
+
+const DAY_LABELS: Record<Weekday, string> = {
+  mon: 'Mon',
+  tue: 'Tue',
+  wed: 'Wed',
+  thu: 'Thu',
+  fri: 'Fri',
+  sat: 'Sat',
+}
 
 function percentColor(percent: number | null, target: number, atRiskMarginPp: number): string {
   if (percent === null) return 'text-muted-foreground'
@@ -31,6 +43,7 @@ export function DashboardPage() {
   const atRiskMarginPp = useSettingsStore((s) => s.atRiskMarginPp)
   const { holidays, load: loadHolidays } = useHolidaysStore()
   const { slots, load: loadSlots } = useTimetableStore()
+  const { semesters, load: loadSemesters } = useSemestersStore()
 
   const semester = currentSemester || null
   const { bySubject, overall, streaksBySubject, bestStreak, remainingBySubject, remainingOverall, recordsBySubject } =
@@ -39,7 +52,8 @@ export function DashboardPage() {
   useEffect(() => {
     loadSubjects({ includeArchived: false })
     loadHolidays()
-  }, [loadSubjects, loadHolidays])
+    loadSemesters()
+  }, [loadSubjects, loadHolidays, loadSemesters])
 
   useEffect(() => {
     if (semester) loadSlots(semester)
@@ -103,6 +117,16 @@ export function DashboardPage() {
         target: overallMinTarget,
       }),
     [overall, remainingOverall, overallMinTarget],
+  )
+
+  const activeSemester = useMemo(() => semesters.find((s) => s.label === semester), [semesters, semester])
+  const weekShape = useMemo(
+    () => computeWeekShape({ slots, periodTimes: activeSemester?.periodTimes ?? [] }),
+    [slots, activeSemester],
+  )
+  const maxTeachingCount = useMemo(
+    () => Math.max(1, ...weekShape.days.map((d) => d.teachingCount)),
+    [weekShape],
   )
 
   return (
@@ -256,6 +280,47 @@ export function DashboardPage() {
                     <Badge variant="outline">{slot.type}</Badge>
                   </div>
                 ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Week shape</CardTitle>
+              <CardDescription>Teaching periods per day</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1.5">
+              {weekShape.days.every((d) => d.teachingCount === 0) ? (
+                <p className="text-sm text-muted-foreground">
+                  No timetable yet. <Link to="/timetable" className="underline">Build one</Link>.
+                </p>
+              ) : (
+                weekShape.days.map((d) => (
+                  <div key={d.day} className="flex items-center gap-2 text-xs">
+                    <span
+                      className={cn(
+                        'w-8 shrink-0 font-medium',
+                        weekShape.heaviestDay === d.day && 'text-destructive',
+                        weekShape.lightestDay === d.day && 'text-success',
+                      )}
+                    >
+                      {DAY_LABELS[d.day]}
+                    </span>
+                    <div className="h-3 flex-1 overflow-hidden rounded-sm bg-muted">
+                      <div
+                        className="h-full rounded-sm bg-primary/70"
+                        style={{ width: `${(d.teachingCount / maxTeachingCount) * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground">
+                      {d.teachingCount === 0
+                        ? '—'
+                        : d.totalMinutes !== null
+                          ? `${(d.totalMinutes / 60).toFixed(d.totalMinutes % 60 === 0 ? 0 : 1)}h`
+                          : `${d.teachingCount}p`}
+                    </span>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 
