@@ -85,6 +85,17 @@ export function AttendancePage() {
 
   const subjectsById = useMemo(() => new Map(subjects.map((s) => [s.id, s])), [subjects])
 
+  // Lightweight audit: the most recently created/edited records in the current
+  // filter, newest first — a quick "what did I just change" without a separate
+  // history table.
+  const recentlyChanged = useMemo(
+    () =>
+      [...records]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 5),
+    [records],
+  )
+
   const sortedRecords = useMemo(
     () =>
       [...records]
@@ -283,6 +294,25 @@ export function AttendancePage() {
           </Select>
         </div>
       </div>
+
+      {recentlyChanged.length > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">Recently changed</p>
+          <div className="flex flex-wrap gap-2">
+            {recentlyChanged.map((r) => (
+              <span key={r.id} className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs">
+                <span className="font-medium">{subjectsById.get(r.subjectId)?.name ?? `#${r.subjectId}`}</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {r.date}·P{r.period}
+                </span>
+                <Badge variant={r.status === 'present' ? 'success' : 'destructive'} className="px-1 text-[10px]">
+                  {r.status}
+                </Badge>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-0">
