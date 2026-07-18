@@ -30,6 +30,9 @@ export interface UseAttendanceResult {
    * semester's end, per subject and in total — feeds end-of-term projection. */
   remainingBySubject: Map<number, number>
   remainingOverall: number
+  /** Remaining scheduled session dates per subject, chronological — feeds the
+   * recovery plan ("attend these exact dates"). */
+  futureDatesBySubject: Map<number, string[]>
   /** This semester's logged records grouped by subject — feeds sparklines
    * without every caller re-deriving the semester scoping. */
   recordsBySubject: Map<number, { subjectId: number; date: string; period: number; status: 'present' | 'absent' }[]>
@@ -140,10 +143,11 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
   // Remaining scheduled periods: tomorrow through the semester end, holiday-
   // excluded, per subject. Counts only slots that carry a subject (they're
   // the ones that can accrue attendance).
-  const { remainingBySubject, remainingOverall } = useMemo(() => {
+  const { remainingBySubject, remainingOverall, futureDatesBySubject } = useMemo(() => {
     const activeSemester = semesters.find((s) => s.label === semester)
     const today = todayIso()
     const bySubj = new Map<number, number>()
+    const datesBySubj = new Map<number, string[]>()
     let total = 0
     if (activeSemester && activeSemester.endDate >= today) {
       const future = enumerateScheduledPeriods({
@@ -152,13 +156,17 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
         startDate: nextDayIso(today),
         endDate: activeSemester.endDate,
       })
+      // enumerateScheduledPeriods already yields periods in date/period order.
       for (const p of future) {
         if (p.subjectId === null) continue
         bySubj.set(p.subjectId, (bySubj.get(p.subjectId) ?? 0) + 1)
+        const list = datesBySubj.get(p.subjectId)
+        if (list) list.push(p.date)
+        else datesBySubj.set(p.subjectId, [p.date])
         total++
       }
     }
-    return { remainingBySubject: bySubj, remainingOverall: total }
+    return { remainingBySubject: bySubj, remainingOverall: total, futureDatesBySubject: datesBySubj }
   }, [semesters, semester, slots, holidays])
 
   const recordsBySubject = useMemo(() => {
@@ -179,6 +187,7 @@ export function useAttendance(semester: string | null): UseAttendanceResult {
     bestStreak,
     remainingBySubject,
     remainingOverall,
+    futureDatesBySubject,
     recordsBySubject,
     loading: recordsLoading,
   }

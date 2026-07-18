@@ -14,7 +14,7 @@ import { useSemestersStore } from '@/store/semesters-store'
 import { useExamsStore } from '@/store/exams-store'
 import { useAttendance } from '@/hooks/use-attendance'
 import { computeSafeBunkCount, resolveSubjectMinTarget, jsDayToWeekday } from '@/lib/attendance-engine'
-import { computeProjection, cumulativeAttendanceSeries } from '@/lib/insights'
+import { computeProjection, cumulativeAttendanceSeries, computeRecoveryPlan } from '@/lib/insights'
 import { computeWeekShape } from '@/lib/timetable-week-shape'
 import type { Weekday } from '@/db/schema'
 import { todayIso, countdownLabel } from '@/lib/date-utils'
@@ -48,8 +48,16 @@ export function DashboardPage() {
   const { exams, load: loadExams } = useExamsStore()
 
   const semester = currentSemester || null
-  const { bySubject, overall, streaksBySubject, bestStreak, remainingBySubject, remainingOverall, recordsBySubject } =
-    useAttendance(semester)
+  const {
+    bySubject,
+    overall,
+    streaksBySubject,
+    bestStreak,
+    remainingBySubject,
+    remainingOverall,
+    futureDatesBySubject,
+    recordsBySubject,
+  } = useAttendance(semester)
 
   useEffect(() => {
     loadSubjects({ includeArchived: false })
@@ -116,10 +124,16 @@ export function DashboardPage() {
             target: resolvedTarget,
           })
           const series = cumulativeAttendanceSeries(recordsBySubject.get(subject.id) ?? [])
-          return { subject, stats, overallStats, resolvedTarget, safeBunks, streak, projection, series }
+          const recovery = computeRecoveryPlan({
+            attended: overallStats.attended,
+            total: overallStats.total,
+            target: resolvedTarget,
+            futureDates: futureDatesBySubject.get(subject.id) ?? [],
+          })
+          return { subject, stats, overallStats, resolvedTarget, safeBunks, streak, projection, series, recovery }
         })
         .sort((a, b) => (a.overallStats.percentage ?? 100) - (b.overallStats.percentage ?? 100)),
-    [subjects, semester, bySubject, subjectMinTarget, streaksBySubject, remainingBySubject, recordsBySubject],
+    [subjects, semester, bySubject, subjectMinTarget, streaksBySubject, remainingBySubject, futureDatesBySubject, recordsBySubject],
   )
 
   const belowTarget = subjectRows.filter(
@@ -228,7 +242,7 @@ export function DashboardPage() {
                 No subjects yet. <Link to="/subjects" className="underline">Add one</Link>.
               </p>
             )}
-            {subjectRows.map(({ subject, overallStats, resolvedTarget, safeBunks, streak, projection, series }) => (
+            {subjectRows.map(({ subject, overallStats, resolvedTarget, safeBunks, streak, projection, series, recovery }) => (
               <div key={subject.id} className="space-y-1">
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex min-w-0 items-center gap-2">
@@ -272,6 +286,13 @@ export function DashboardPage() {
                     </span>
                   </span>
                 </div>
+                {!recovery.onTrack && (
+                  <p className="text-xs text-destructive">
+                    {recovery.impossible
+                      ? `Recovery: can't reach ${resolvedTarget}% this term even attending every remaining class.`
+                      : `Recovery: attend the next ${recovery.needed} session${recovery.needed === 1 ? '' : 's'} (through ${recovery.clearByDate}) with no skips to hit ${resolvedTarget}%.`}
+                  </p>
+                )}
               </div>
             ))}
           </CardContent>

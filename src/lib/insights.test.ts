@@ -4,6 +4,7 @@ import {
   computeStreaksBySubject,
   computeProjection,
   cumulativeAttendanceSeries,
+  computeRecoveryPlan,
   type StreakRecordInput,
 } from './insights'
 
@@ -110,5 +111,33 @@ describe('computeProjection', () => {
     const p = computeProjection({ attended: 0, total: 0, remaining: 0, target: 75 })
     expect(p.ifAllAttended).toBeNull()
     expect(p.ifNoneAttended).toBeNull()
+  })
+})
+
+describe('computeRecoveryPlan', () => {
+  const futureDates = ['2026-03-02', '2026-03-04', '2026-03-06', '2026-03-09', '2026-03-11', '2026-03-13']
+
+  it('is on track when already at/above target', () => {
+    const plan = computeRecoveryPlan({ attended: 9, total: 10, target: 75, futureDates })
+    expect(plan.onTrack).toBe(true)
+    expect(plan.attendDates).toEqual([])
+    expect(plan.clearByDate).toBeNull()
+  })
+
+  it('lists the exact next sessions to attend and the clear-by date', () => {
+    // 6/10 = 60%, target 75 -> needs 6 consecutive attended.
+    const plan = computeRecoveryPlan({ attended: 6, total: 10, target: 75, futureDates })
+    expect(plan.needed).toBe(6)
+    expect(plan.impossible).toBe(false)
+    expect(plan.attendDates).toEqual(futureDates.slice(0, 6))
+    expect(plan.clearByDate).toBe('2026-03-13')
+  })
+
+  it('flags impossible when not enough future sessions remain', () => {
+    // needs 6 but only 3 remain.
+    const plan = computeRecoveryPlan({ attended: 6, total: 10, target: 75, futureDates: futureDates.slice(0, 3) })
+    expect(plan.impossible).toBe(true)
+    expect(plan.attendDates).toEqual([])
+    expect(plan.clearByDate).toBeNull()
   })
 })

@@ -101,3 +101,52 @@ export function computeProjection(params: {
     classesNeededForTarget: targetReachable ? needed : null,
   }
 }
+
+export interface RecoveryPlan {
+  /** Already at/above target — nothing to recover. */
+  onTrack: boolean
+  /** Consecutive future sessions that must be attended (no skips) to reach
+   * target. 0 when onTrack. */
+  needed: number
+  /** Can't reach target even attending every remaining session this term. */
+  impossible: boolean
+  /** The exact future session dates to attend — first `needed` of them. Empty
+   * when onTrack or impossible. A date can repeat if the subject meets more
+   * than once that day. */
+  attendDates: string[]
+  /** The date of the last session in the plan — "clear by DD". Null when the
+   * plan is empty. */
+  clearByDate: string | null
+}
+
+/**
+ * Turns "you're below target" into a concrete do-this plan: attend the next
+ * `needed` scheduled sessions with no skips, and here are their exact dates.
+ * `futureDates` is that subject's remaining scheduled session dates in
+ * chronological order (one entry per session, so a twice-a-week subject has
+ * two entries some weeks). Pure — the caller supplies the dates from
+ * enumerateScheduledPeriods.
+ */
+export function computeRecoveryPlan(params: {
+  attended: number
+  total: number
+  target: number
+  futureDates: string[]
+}): RecoveryPlan {
+  const { attended, total, target, futureDates } = params
+  const needed = computeClassesNeededToReachTarget(attended, total, target)
+  if (needed === 0) {
+    return { onTrack: true, needed: 0, impossible: false, attendDates: [], clearByDate: null }
+  }
+  if (needed > futureDates.length) {
+    return { onTrack: false, needed, impossible: true, attendDates: [], clearByDate: null }
+  }
+  const attendDates = futureDates.slice(0, needed)
+  return {
+    onTrack: false,
+    needed,
+    impossible: false,
+    attendDates,
+    clearByDate: attendDates[attendDates.length - 1],
+  }
+}
