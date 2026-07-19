@@ -20,6 +20,9 @@ release
 *.db-wal
 *.db-shm
 
+# Environment files
+.env*
+
 # Unrelated leftover virtualenv in this directory
 venv/
 
