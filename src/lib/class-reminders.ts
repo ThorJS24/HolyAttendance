@@ -3,6 +3,8 @@
 // tested directly so the window/exclusion logic doesn't have to be exercised
 // by waiting on real timers.
 
+import { NON_ATTENDANCE_TYPES } from './period-marking'
+
 export interface ReminderSlotInput {
   period: number
   type: string
@@ -27,11 +29,14 @@ function parseMinutes(time: string): number | null {
   return Number(m[1]) * 60 + Number(m[2])
 }
 
-// lunch is the only type excluded from reminders: it's not a class. Meeting,
-// mentoring, and minor ARE real scheduled commitments, so they're reminded
-// about like a normal class — a deliberate call (they're on your timetable
-// for a reason, and a heads-up is exactly as useful as it is for a lecture).
-const NO_REMINDER_TYPES = new Set(['lunch'])
+// Skip lunch and meeting, same as NON_ATTENDANCE_TYPES — neither is a class
+// worth a heads-up for. Mentoring is the one deliberate divergence: it moved
+// into NON_ATTENDANCE_TYPES in 79d352e (stopped counting toward attendance),
+// but it's still a real scheduled commitment, so it keeps its reminder here
+// — "counts toward attendance" and "worth a heads-up" are different
+// questions that happen to mostly overlap. Minor isn't in NON_ATTENDANCE_TYPES
+// at all, so it's reminded about like a normal class.
+const NO_REMINDER_TYPES = new Set(NON_ATTENDANCE_TYPES.filter((type) => type !== 'mentoring'))
 
 /**
  * Reminders whose lead window is currently open: now is in

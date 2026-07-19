@@ -37,14 +37,46 @@ describe('computeDueReminders', () => {
     expect(due).toEqual([])
   })
 
-  it('excludes lunch but reminds for meeting/mentoring/minor', () => {
+  it('excludes lunch even inside its lead window', () => {
+    // P4 at 12:00, window [11:50,12:00). 11:52 = 712.
     const due = computeDueReminders({
-      slots: [slot(4, 'lunch', null), slot(2, 'mentoring', 'Mentoring')],
+      slots: [slot(4, 'lunch', null)],
       periodTimes: times,
-      nowMinutes: 592, // 09:52, window for P2 (10:00) is [09:50,10:00)
+      nowMinutes: 712,
+      leadMinutes: 10,
+    })
+    expect(due).toEqual([])
+  })
+
+  it('excludes meeting even inside its lead window', () => {
+    // P2 at 10:00, window [09:50,10:00). 09:52 = 592.
+    const due = computeDueReminders({
+      slots: [slot(2, 'meeting', 'Dept meeting')],
+      periodTimes: times,
+      nowMinutes: 592,
+      leadMinutes: 10,
+    })
+    expect(due).toEqual([])
+  })
+
+  it('reminds for mentoring, unlike lunch/meeting', () => {
+    const due = computeDueReminders({
+      slots: [slot(2, 'mentoring', 'Mentoring')],
+      periodTimes: times,
+      nowMinutes: 592, // inside P2's window
       leadMinutes: 10,
     })
     expect(due.map((d) => d.period)).toEqual([2])
+  })
+
+  it('reminds for minor, same as a normal class', () => {
+    const due = computeDueReminders({
+      slots: [slot(1, 'minor', 'Minor project')],
+      periodTimes: times,
+      nowMinutes: 532, // inside P1's window
+      leadMinutes: 10,
+    })
+    expect(due.map((d) => d.period)).toEqual([1])
   })
 
   it('returns nothing when the period has no allocated time', () => {
