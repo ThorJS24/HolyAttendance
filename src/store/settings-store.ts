@@ -8,6 +8,7 @@ interface SettingsState {
   theme: string
   density: string
   classReminders: boolean
+  examReminders: boolean
   classReminderLeadMinutes: number
   launchView: string
   mutedNotificationCategories: string[]
@@ -23,6 +24,7 @@ interface SettingsState {
   setTheme: (value: string) => Promise<void>
   setDensity: (value: string) => Promise<void>
   setClassReminders: (value: boolean) => Promise<void>
+  setExamReminders: (value: boolean) => Promise<void>
   setClassReminderLeadMinutes: (value: number) => Promise<void>
   setLaunchView: (value: string) => Promise<void>
   setMutedNotificationCategories: (value: string[]) => Promise<void>
@@ -38,6 +40,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   theme: 'system',
   density: 'comfortable',
   classReminders: false,
+  examReminders: true,
   classReminderLeadMinutes: 10,
   launchView: 'today',
   mutedNotificationCategories: [],
@@ -56,6 +59,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       theme: settings.theme,
       density: settings.density,
       classReminders: settings.classReminders,
+      examReminders: settings.examReminders,
       classReminderLeadMinutes: settings.classReminderLeadMinutes,
       launchView: settings.launchView,
       mutedNotificationCategories: settings.mutedNotificationCategories ?? [],
@@ -90,6 +94,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     await window.bunkmate.settings.update({ density })
     set({ density })
   },
+  setExamReminders: async (examReminders) => {
+    await window.bunkmate.settings.update({ examReminders })
+    set({ examReminders })
+  },
+
   setClassReminders: async (classReminders) => {
     await window.bunkmate.settings.update({ classReminders })
     set({ classReminders })

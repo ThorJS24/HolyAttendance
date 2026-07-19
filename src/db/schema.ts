@@ -270,6 +270,11 @@ export const settings = sqliteTable('settings', {
   // Requires the active semester to have allocated period times.
   classReminders: integer('class_reminders', { mode: 'boolean' }).notNull().default(false),
   classReminderLeadMinutes: integer('class_reminder_lead_minutes').notNull().default(10),
+  // Exam heads-ups (evening before + morning of). Defaults ON, unlike class
+  // reminders: exams are rare and high-stakes, so the notification is worth
+  // far more than it costs in noise. Same caveat applies — only fires while
+  // the app is running.
+  examReminders: integer('exam_reminders', { mode: 'boolean' }).notNull().default(true),
   // Which view the app opens on: 'today' (the once-a-day check-in, default)
   // or 'dashboard'. Kept configurable so long-time users can keep the old
   // Dashboard-first behavior.

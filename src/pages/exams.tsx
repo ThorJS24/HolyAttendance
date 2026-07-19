@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, FileUp, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, FileUp, X, ChevronDown, ChevronRight, CalendarPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +25,7 @@ import { useToastStore } from '@/store/toast-store'
 import { countdownLabel, daysUntil, todayIso } from '@/lib/date-utils'
 import { parseHallTicket } from '@/lib/hall-ticket-parser'
 import { groupExams } from '@/lib/exam-grouping'
+import { buildExamsIcs } from '@/lib/exam-ics'
 import type { Exam } from '../../electron/db/repositories/exams'
 import type { PdfOcrProgress } from '../../electron/ipc/contract'
 
@@ -280,6 +281,39 @@ export function ExamsPage() {
     }
   }
 
+  async function handleExportIcs() {
+    // Export the semester currently shown in the switcher.
+    const forSemester = exams.filter((e) => e.semester === semester)
+    if (forSemester.length === 0) {
+      pushToast({ title: 'Nothing to export', description: `No exams in ${semester} yet.` })
+      return
+    }
+    const ics = buildExamsIcs({
+      exams: forSemester.map((e) => ({
+        id: e.id,
+        name: e.name,
+        courseCode: e.courseCode,
+        date: e.date,
+        startTime: e.startTime,
+        reportingTime: e.reportingTime,
+        location: e.location,
+        examGroup: e.examGroup,
+      })),
+      semesterLabel: semester,
+    })
+    const path = await window.bunkmate.files.saveFile({
+      defaultName: `exams-${semester}.ics`,
+      content: ics,
+      filters: [{ name: 'Calendar', extensions: ['ics'] }],
+    })
+    if (path) {
+      pushToast({
+        title: `Exported ${forSemester.length} exam${forSemester.length === 1 ? '' : 's'}`,
+        description: path,
+      })
+    }
+  }
+
   async function handleConfirmDelete() {
     if (!deleteTarget) return
     const target = deleteTarget
@@ -305,6 +339,9 @@ export function ExamsPage() {
         <h1 className="text-2xl font-semibold">Exams</h1>
         <div className="flex items-center gap-3">
           <SemesterSwitcher />
+          <Button variant="outline" onClick={handleExportIcs} title="Export this semester's exams to a calendar file">
+            <CalendarPlus /> Export .ics
+          </Button>
           <Button variant="outline" onClick={handleImportPdf} disabled={progress !== null}>
             <FileUp /> Import hall ticket
           </Button>

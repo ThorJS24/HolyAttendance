@@ -33,6 +33,7 @@ export function SettingsPage() {
     atRiskMarginPp,
     mutedNotificationCategories,
     classReminders,
+    examReminders,
     classReminderLeadMinutes,
     currentSemester,
     backupIntervalDays,
@@ -46,6 +47,7 @@ export function SettingsPage() {
     setLaunchView,
     setMutedNotificationCategories,
     setClassReminders,
+    setExamReminders,
     setClassReminderLeadMinutes,
     setBackupIntervalDays,
     setBackupDir,
@@ -325,13 +327,25 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Class reminders</CardTitle>
+          <CardTitle>Class &amp; exam reminders</CardTitle>
           <CardDescription>
-            A desktop notification before each class starts. Only fires while BunkMate is running — it isn't a
+            Desktop notifications before a class or exam. Only fires while BunkMate is running — it isn't a
             background service, so nothing is sent when the app is closed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="exam-reminders" className="font-normal">
+                Remind me about exams
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                The evening before (6pm) and on the morning of, with the time and room.
+              </p>
+            </div>
+            <Switch id="exam-reminders" checked={examReminders} onCheckedChange={setExamReminders} />
+          </div>
+          <div className="border-t pt-3" />
           {!activeSemesterHasTimes ? (
             <p className="text-sm text-muted-foreground">
               Reminders need real class times. Set them first with{' '}

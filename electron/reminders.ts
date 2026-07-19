@@ -1,8 +1,9 @@
 import { Notification, BrowserWindow } from 'electron'
 import type { AppDatabase } from './db/client'
-import { settingsRepo, semestersRepo, timetableSlotsRepo, subjectsRepo } from './db/repositories'
+import { settingsRepo, semestersRepo, timetableSlotsRepo, subjectsRepo, examsRepo } from './db/repositories'
 import { jsDayToWeekday } from '../src/lib/attendance-engine'
 import { computeDueReminders } from '../src/lib/class-reminders'
+import { computeDueExamReminders } from '../src/lib/exam-reminders'
 import { todayIso } from '../src/lib/date-utils'
 
 // How often the scheduler re-checks. 30s means a reminder fires within half a
@@ -29,12 +30,59 @@ export function startClassReminders(db: AppDatabase): () => void {
   const firedToday = new Set<string>()
   let firedDate = todayIso()
 
+  /** Fires a native notification once per key, per day. */
+  function fireOnce(key: string, title: string, body: string) {
+    if (firedToday.has(key)) return
+    firedToday.add(key)
+    if (!Notification.isSupported()) return
+    const notification = new Notification({ title, body })
+    notification.on('click', () => {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
+    })
+    notification.show()
+  }
+
+  // Exams are reminded independently of the class-reminder settings and of
+  // whether the timetable has clock times — they're separate commitments.
+  function tickExams(today: string) {
+    const settings = settingsRepo.getSettings(db)
+    if (!settings.examReminders) return
+    const exams = examsRepo.listExams(db, { semester: settings.currentSemester })
+    if (exams.length === 0) return
+
+    const due = computeDueExamReminders({
+      exams: exams.map((e) => ({
+        id: e.id,
+        name: e.name,
+        courseCode: e.courseCode,
+        date: e.date,
+        startTime: e.startTime,
+        reportingTime: e.reportingTime,
+        location: e.location,
+      })),
+      todayIso: today,
+      nowMinutes: nowMinutes(),
+    })
+    for (const reminder of due) fireOnce(reminder.key, reminder.title, reminder.body)
+  }
+
   function tick() {
     try {
       const today = todayIso()
       if (today !== firedDate) {
         firedToday.clear()
         firedDate = today
+      }
+
+      // Never let an exam-reminder failure stop class reminders, or vice versa.
+      try {
+        tickExams(today)
+      } catch {
+        // swallow; retry next tick
       }
 
       const settings = settingsRepo.getSettings(db)
@@ -70,19 +118,7 @@ export function startClassReminders(db: AppDatabase): () => void {
       })
 
       for (const reminder of due) {
-        const key = `${today}:${reminder.period}`
-        if (firedToday.has(key)) continue
-        firedToday.add(key)
-        if (!Notification.isSupported()) continue
-        const notification = new Notification({ title: reminder.title, body: reminder.body })
-        notification.on('click', () => {
-          const win = BrowserWindow.getAllWindows()[0]
-          if (win) {
-            if (win.isMinimized()) win.restore()
-            win.focus()
-          }
-        })
-        notification.show()
+        fireOnce(`${today}:${reminder.period}`, reminder.title, reminder.body)
       }
     } catch {
       // A reminder failure must never take down the app — swallow and retry
