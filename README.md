@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="build/icon.png" width="96" height="96" alt="BunkMate Pro icon" />
+<img src="build/icon.png" width="96" height="96" alt="HolyAttendance icon — a halo over a checkmark" />
 
 # BunkMate Pro
 
