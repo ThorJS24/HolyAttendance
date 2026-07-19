@@ -5,6 +5,11 @@
   "type": "module",
   "description": "Offline attendance tracker for CHRIST University students",
   "author": "BunkMate Pro",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ThorJS24/HolyAttendance.git"
+  },
   "main": "dist-electron/main.cjs",
   "scripts": {
     "predev": "electron-rebuild -f -w better-sqlite3",
